@@ -1,0 +1,32 @@
+{
+  "systems": [
+    {
+      "id": "test-system",
+      "name": "Test Transit",
+      "schedule_url": "http://localhost:9999/gtfs.zip",
+      "realtime": {
+        "trip_updates": ["http://localhost:9999/trip-updates"],
+        "vehicle_positions": ["http://localhost:9999/vehicle-positions"],
+        "alerts": ["http://localhost:9999/alerts"]
+      },
+      "auth": null
+    },
+    {
+      "id": "auth-system",
+      "name": "Auth Transit",
+      "schedule_url": "http://localhost:9999/gtfs-auth.zip",
+      "realtime": {
+        "trip_updates": [],
+        "vehicle_positions": [],
+        "alerts": []
+      },
+      "auth": {
+        "type": "query_param",
+        "param_name": "api_key",
+        "key_env": "TEST_API_KEY"
+      }
+    }
+  ],
+  "data_dir": "/tmp/gtfs-mcp-test/data",
+  "schedule_refresh_hours": 24
+}
