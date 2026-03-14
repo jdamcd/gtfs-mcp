@@ -2,7 +2,14 @@
 
 An MCP server for querying GTFS static schedules and GTFS-RT realtime feeds. Works with any GTFS-compatible transit system. Includes a ready-to-use config for NYC Subway (MTA).
 
-![Screenshot of gtfs-mcp in Claude Desktop, answering a question about G train service at Nassau Av](screenshot.png)
+**Service alerts**
+
+![Asking Claude about G train service alerts at Nassau Av](readme_img/example_alerts.png)
+
+
+**Arrivals**
+
+![Asking Claude about L train arrival times from Bedford Av](readme_img/example_arrivals.png)
 
 ## Setup
 
