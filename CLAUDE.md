@@ -22,7 +22,7 @@ Test with MCP inspector:
 GTFS_MCP_CONFIG=./config.mta.json npx @modelcontextprotocol/inspector node dist/index.js
 ```
 
-CI runs build + test on Node 18, 20, 22.
+CI runs build + test on Node 22, 24.
 
 ## Architecture
 
@@ -52,3 +52,17 @@ Tests use vitest with `fileParallelism: false`. The integration test (`test/inte
 Test helpers in `test/helpers.ts` encode protobuf feed fixtures. The GTFS ZIP fixture is built by `test/fixtures/create-gtfs-zip.ts`.
 
 **Important:** `vi.mock("../src/gtfs/static.js")` must appear before importing `createServer` due to module mock hoisting.
+
+## Evals
+
+LLM evals use [promptfoo](https://promptfoo.dev/) to test that a model selects the correct MCP tools for natural-language transit queries. Config is in `promptfooconfig.yaml`.
+
+```bash
+npm run build          # evals run against dist/
+npm run eval           # run all eval cases (requires ANTHROPIC_API_KEY)
+npm run eval:view      # open web UI to inspect results
+```
+
+Set `ANTHROPIC_API_KEY` and `GTFS_MCP_CONFIG` in `.env` (gitignored) or as environment variables. Evals use `config.mta.json` for live MTA data.
+
+**Limitation:** promptfoo's Anthropic provider only supports single-turn tool calling. The system prompt provides the `mta-subway` system ID upfront so the model can call the target tool directly instead of spending its one turn on `list_systems`.

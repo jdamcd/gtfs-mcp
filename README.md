@@ -131,6 +131,18 @@ The `system` parameter is the system ID from your config (e.g. `"mta-subway"`).
 npm test
 ```
 
+### Evals
+
+LLM evals use [promptfoo](https://promptfoo.dev/) to verify that a model selects the correct tools for natural-language transit queries. Requires an `ANTHROPIC_API_KEY` set in `.env` or as an environment variable.
+
+```bash
+npm run build
+npm run eval
+npm run eval:view   # open web UI to inspect results
+```
+
+### MCP inspector
+
 Test with the MCP inspector:
 
 ```bash
