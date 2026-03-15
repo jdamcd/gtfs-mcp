@@ -3,3 +3,5 @@ dist/
 *.db
 .claude/
 .DS_Store
+.env
+promptfoo_results/

@@ -1,0 +1,137 @@
+description: "GTFS MCP tools evaluation"
+
+# The system prompt provides the transit system ID upfront because promptfoo
+# only supports single-turn tool calling. Without it, the model spends its
+# one turn calling list_systems to discover the ID instead of the target tool.
+prompts:
+  - id: "transit-query"
+    raw: |
+      [
+        {
+          "role": "system",
+          "content": "You are a transit assistant with access to GTFS tools. The available transit system has id 'mta-subway' (MTA New York City Subway). Always use this system_id when calling tools. Use the tools to answer queries — do not rely on your own knowledge."
+        },
+        {
+          "role": "user",
+          "content": "{{query}}"
+        }
+      ]
+
+providers:
+  - id: anthropic:messages:claude-sonnet-4-6
+    config:
+      mcp:
+        enabled: true
+        server:
+          command: node
+          args:
+            - dist/index.js
+
+defaultTest:
+  options:
+    provider: anthropic:messages:claude-sonnet-4-6
+
+tests:
+  # --- Tool selection: basic coverage ---
+
+  - description: "Systems: discover available systems"
+    vars:
+      query: "What subway networks can I query?"
+    assert:
+      - type: javascript
+        value: "output.includes('\"name\":\"list_systems\"')"
+
+  - description: "Stops: search by name"
+    vars:
+      query: "I'm trying to find stops around Grand Central"
+    assert:
+      - type: javascript
+        value: "output.includes('\"name\":\"search_stops\"')"
+
+  - description: "Stops: get details by ID"
+    vars:
+      query: "What routes serve stop 127N?"
+    assert:
+      - type: javascript
+        value: "output.includes('\"name\":\"get_stop\"') && output.includes('\"stop_id\"') && output.includes('127N')"
+
+  - description: "Routes: list all"
+    vars:
+      query: "What routes are in the system?"
+    assert:
+      - type: javascript
+        value: "output.includes('\"name\":\"list_routes\"')"
+
+  - description: "Routes: get details with direction"
+    vars:
+      query: "What stops does the 1 train make going northbound?"
+    assert:
+      - type: javascript
+        value: "output.includes('\"name\":\"get_route\"') && output.includes('\"route_id\"')"
+
+  - description: "Arrivals: upcoming trains at a stop"
+    vars:
+      query: "When is the next train arriving at stop 127N?"
+    assert:
+      - type: javascript
+        value: "output.includes('\"name\":\"get_arrivals\"') && output.includes('\"stop_id\"') && output.includes('127N')"
+
+  - description: "Alerts: check service disruptions"
+    vars:
+      query: "Is there anything disrupting subway service today?"
+    assert:
+      - type: javascript
+        value: "output.includes('\"name\":\"get_alerts\"')"
+
+  - description: "Vehicles: track positions with route filter"
+    vars:
+      query: "Where are all the 1 train cars right now?"
+    assert:
+      - type: javascript
+        value: "output.includes('\"name\":\"get_vehicles\"') && output.includes('\"route_id\"')"
+
+  - description: "Trips: look up specific trip"
+    vars:
+      query: "Can you pull up the details for trip 075850_1..N03R?"
+    assert:
+      - type: javascript
+        value: "output.includes('\"name\":\"get_trip\"') && output.includes('\"trip_id\"') && output.includes('075850_1..N03R')"
+
+  - description: "Status: system overview"
+    vars:
+      query: "Give me a status overview of the mta-subway system"
+    assert:
+      - type: javascript
+        value: "output.includes('\"name\":\"get_system_status\"')"
+
+  # --- Multi-tool ---
+
+  - description: "Multi-tool: arrivals + alerts together"
+    vars:
+      query: "I'm at stop 127N — what trains are coming and are there any service alerts?"
+    assert:
+      - type: javascript
+        value: "output.includes('\"name\":\"get_arrivals\"') && output.includes('\"name\":\"get_alerts\"')"
+
+  # --- Negative / disambiguation ---
+
+  - description: "Negative: off-topic query should not call tools"
+    vars:
+      query: "What's the weather like in Manhattan today?"
+    assert:
+      - type: javascript
+        value: "!output.includes('\"type\":\"tool_use\"')"
+
+  - description: "Negative: ambiguous stop name should search, not get"
+    vars:
+      query: "Tell me about the Park Place stop"
+    assert:
+      - type: javascript
+        value: "output.includes('\"name\":\"search_stops\"') && !output.includes('\"name\":\"get_stop\"')"
+
+  - description: "Negative: arrivals without stop ID should search first"
+    vars:
+      query: "When's the next train at Fulton Street?"
+    assert:
+      - type: javascript
+        value: "output.includes('\"name\":\"search_stops\"')"
