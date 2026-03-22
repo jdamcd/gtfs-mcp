@@ -1,3 +1,4 @@
+import type { AppConfig } from "../src/config.js";
 import { importGtfs, openDb } from "gtfs";
 import { join } from "node:path";
 import { mkdirSync, rmSync, existsSync } from "node:fs";
@@ -8,6 +9,35 @@ const { transit_realtime } = GtfsRealtimeBindings;
 
 const TEST_DB_BASE = "/tmp/gtfs-mcp-test";
 const FIXTURE_ZIP = join(import.meta.dirname, "fixtures", "gtfs.zip");
+
+export function createTestConfig(overrides?: Partial<AppConfig>): AppConfig {
+  return {
+    systems: [
+      {
+        id: "test",
+        name: "Test Transit",
+        schedule_url: "http://localhost/gtfs.zip",
+        realtime: {
+          trip_updates: ["http://localhost/trip-updates"],
+          vehicle_positions: ["http://localhost/vehicle-positions"],
+          alerts: ["http://localhost/alerts"],
+        },
+        auth: null,
+      },
+    ],
+    data_dir: "/tmp/gtfs-mcp-test/default",
+    schedule_refresh_hours: 24,
+    ...overrides,
+  };
+}
+
+export function getTextContent(result: { content: Array<{ text: string }> }): string {
+  return result.content[0].text;
+}
+
+export function getJsonContent(result: { content: Array<{ text: string }> }): unknown {
+  return JSON.parse(getTextContent(result));
+}
 
 export async function setupTestDb(): Promise<{ db: ReturnType<typeof openDb>; dir: string }> {
   const dbDir = join(TEST_DB_BASE, randomUUID());

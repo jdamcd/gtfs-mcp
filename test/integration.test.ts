@@ -1,13 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { importGtfs, openDb } from "gtfs";
-import { join } from "node:path";
-import { mkdirSync, rmSync, existsSync } from "node:fs";
-import { randomUUID } from "node:crypto";
-import { encodeTripUpdateFeed, encodeAlertFeed, encodeVehiclePositionFeed } from "./helpers.js";
-
-const FIXTURE_ZIP = join(import.meta.dirname, "fixtures", "gtfs.zip");
+import { setupTestDb, cleanupTestDb, createTestConfig, getTextContent, getJsonContent, encodeTripUpdateFeed, encodeAlertFeed, encodeVehiclePositionFeed } from "./helpers.js";
 
 // Mock static.ts before any imports use it
 let testDb: any;
@@ -18,25 +12,8 @@ vi.mock("../src/gtfs/static.js", () => ({
 
 // Must import createServer AFTER vi.mock
 const { createServer } = await import("../src/server.js");
-import type { AppConfig } from "../src/config.js";
 
-const testConfig: AppConfig = {
-  systems: [
-    {
-      id: "test",
-      name: "Test Transit",
-      schedule_url: "http://localhost/gtfs.zip",
-      realtime: {
-        trip_updates: ["http://localhost/trip-updates"],
-        vehicle_positions: ["http://localhost/vehicle-positions"],
-        alerts: ["http://localhost/alerts"],
-      },
-      auth: null,
-    },
-  ],
-  data_dir: "/tmp/gtfs-mcp-test/integration",
-  schedule_refresh_hours: 24,
-};
+const testConfig = createTestConfig();
 
 let client: Client;
 let dbDir: string;
@@ -45,18 +22,9 @@ let s2ArrivalSecs: number;
 let s3ArrivalSecs: number;
 
 beforeAll(async () => {
-  // Set up test database directly (not via setupTestDb which shares the module mock scope)
-  dbDir = join("/tmp/gtfs-mcp-test", randomUUID());
-  mkdirSync(dbDir, { recursive: true });
-  const sqlitePath = join(dbDir, "test.db");
-
-  await importGtfs({
-    agencies: [{ path: FIXTURE_ZIP }],
-    sqlitePath,
-    ignoreDuplicates: true,
-  });
-
-  testDb = openDb({ sqlitePath });
+  const result = await setupTestDb();
+  testDb = result.db;
+  dbDir = result.dir;
 
   // Mock realtime fetch to return test protobuf data
   // Store timestamps so tests can assert actual time values
@@ -147,18 +115,8 @@ beforeAll(async () => {
 
 afterAll(() => {
   vi.restoreAllMocks();
-  if (dbDir && existsSync(dbDir)) {
-    rmSync(dbDir, { recursive: true, force: true });
-  }
+  cleanupTestDb(dbDir);
 });
-
-function getTextContent(result: any): string {
-  return result.content[0].text;
-}
-
-function getJsonContent(result: any): any {
-  return JSON.parse(getTextContent(result));
-}
 
 /** Convert UNIX seconds to local HH:MM:SS (matching the server's output format). */
 function toLocalTimeString(unixSecs: number): string {

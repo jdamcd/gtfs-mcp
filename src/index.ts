@@ -3,7 +3,17 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { loadConfig } from "./config.js";
 import { createServer } from "./server.js";
 
+const useHttp =
+  process.argv.includes("--http") ||
+  process.env.GTFS_MCP_TRANSPORT === "http";
+
 async function main(): Promise<void> {
+  if (useHttp) {
+    const { startHttpServer } = await import("./http.js");
+    await startHttpServer();
+    return;
+  }
+
   const config = loadConfig();
 
   console.error(
