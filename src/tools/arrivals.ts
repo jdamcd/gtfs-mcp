@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getScheduledArrivals, resolveStopIds } from "../gtfs/queries.js";
+import { getScheduledArrivals, getStopName, resolveStopIds } from "../gtfs/queries.js";
 import { fetchAllFeeds } from "../gtfs/realtime.js";
 import type { Arrival } from "../types.js";
 import {
@@ -55,6 +55,13 @@ export function registerArrivalTools(ctx: ToolContext): void {
       );
 
       const realtimeArrivals: Array<Arrival & { _sortTime: number }> = [];
+      const headsignCache = new Map<string, string | null>();
+      const resolveHeadsign = (stopId: string): string | null => {
+        if (!headsignCache.has(stopId)) {
+          headsignCache.set(stopId, getStopName(db, stopId));
+        }
+        return headsignCache.get(stopId)!;
+      };
 
       for (const entity of entities) {
         const tu = entity.tripUpdate;
@@ -65,7 +72,10 @@ export function registerArrivalTools(ctx: ToolContext): void {
 
         if (route_id && tripRouteId !== route_id) continue;
 
-        for (const stu of tu.stopTimeUpdate ?? []) {
+        const stopTimeUpdates = tu.stopTimeUpdate ?? [];
+        const lastStopId = stopTimeUpdates.at(-1)?.stopId ?? null;
+
+        for (const stu of stopTimeUpdates) {
           if (!stu.stopId || !stopIdSet.has(stu.stopId)) continue;
 
           const arrivalTime = extractTime(stu.arrival?.time);
@@ -81,7 +91,7 @@ export function registerArrivalTools(ctx: ToolContext): void {
             stop_id: stu.stopId,
             arrival_time: arrivalLocal,
             minutes_away: minutesAway,
-            headsign: null,
+            headsign: lastStopId ? resolveHeadsign(lastStopId) : null,
             is_realtime: true,
             _sortTime: arrivalTime,
           });

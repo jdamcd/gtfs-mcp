@@ -244,6 +244,8 @@ describe("get_arrivals", () => {
     expect(t1Arrival.minutes_away).toBeLessThanOrEqual(11);
     // Assert actual time value matches the fixture timestamp
     expect(t1Arrival.arrival_time).toBe(toLocalTimeString(s2ArrivalSecs));
+    // Headsign derived from last stop in trip update (S3 = Times Square)
+    expect(t1Arrival.headsign).toBe("Times Square");
   });
 
   it("resolves parent station to child stops for realtime arrivals", async () => {

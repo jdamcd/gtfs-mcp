@@ -29,6 +29,13 @@ export interface StopTimeResult {
   drop_off_type: number | null;
 }
 
+export function getStopName(db: any, stopId: string): string | null {
+  const row = db
+    .prepare(`SELECT stop_name FROM stops WHERE stop_id = ?`)
+    .get(stopId) as { stop_name: string | null } | undefined;
+  return row?.stop_name ?? null;
+}
+
 export function resolveStopIds(db: any, stopId: string): string[] {
   // If this is a parent station, return its child stop IDs
   const children = db
