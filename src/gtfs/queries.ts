@@ -29,6 +29,58 @@ export interface StopTimeResult {
   drop_off_type: number | null;
 }
 
+export interface NearbyStopResult extends StopResult {
+  distance_m: number;
+}
+
+// Meters per degree of latitude (roughly constant). Dividing by cos(lat)
+// adjusts for longitude lines converging toward the poles; the floor avoids
+// runaway deltas at extreme latitudes where transit systems don't exist.
+const METERS_PER_DEGREE = 111_320;
+const MIN_COS_LAT = 0.01;
+
+type PositionedStop = StopResult & { stop_lat: number; stop_lon: number };
+
+export function findStopsNearby(
+  db: any,
+  lat: number,
+  lon: number,
+  radiusMeters: number,
+  limit: number
+): NearbyStopResult[] {
+  const latDelta = radiusMeters / METERS_PER_DEGREE;
+  const lonDelta = radiusMeters / (METERS_PER_DEGREE * Math.max(Math.cos((lat * Math.PI) / 180), MIN_COS_LAT));
+
+  const candidates = db
+    .prepare(
+      `SELECT stop_id, stop_name, stop_lat, stop_lon, stop_code, location_type, parent_station
+       FROM stops
+       WHERE stop_lat BETWEEN ? AND ?
+         AND stop_lon BETWEEN ? AND ?
+         AND (parent_station IS NULL OR parent_station = '')
+         AND stop_lat IS NOT NULL
+         AND stop_lon IS NOT NULL`
+    )
+    .all(lat - latDelta, lat + latDelta, lon - lonDelta, lon + lonDelta) as PositionedStop[];
+
+  return candidates
+    .map((s) => ({ ...s, distance_m: Math.round(haversineMeters(lat, lon, s.stop_lat, s.stop_lon)) }))
+    .filter((s) => s.distance_m <= radiusMeters)
+    .sort((a, b) => a.distance_m - b.distance_m)
+    .slice(0, limit);
+}
+
+function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6_371_000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
 export function getStopName(db: any, stopId: string): string | null {
   const row = db
     .prepare(`SELECT stop_name FROM stops WHERE stop_id = ?`)

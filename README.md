@@ -106,6 +106,7 @@ Add any API keys your systems need to the `env` block.
 |------|-------------|------------|
 | `list_systems` | List all configured transit systems | — |
 | `search_stops` | Search stops by name | `system`, `query`, `limit?` |
+| `find_nearby_stops` | Stops near a coordinate, ordered by distance | `system`, `lat`, `lon`, `radius_m?`, `limit?` |
 | `get_stop` | Stop details and routes serving it | `system`, `stop_id` |
 | `get_arrivals` | Upcoming arrivals with realtime delays | `system`, `stop_id`, `route_id?`, `limit?` |
 | `list_routes` | All routes in a system | `system`, `route_type?` |

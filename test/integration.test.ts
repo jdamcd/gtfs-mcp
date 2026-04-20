@@ -156,6 +156,45 @@ describe("search_stops", () => {
   });
 });
 
+describe("find_nearby_stops", () => {
+  it("returns parent stations ordered by distance, excluding child platforms", async () => {
+    // Point is exactly at S1 (Central Station parent, 40.7128, -74.0060)
+    const result = await client.callTool({
+      name: "find_nearby_stops",
+      arguments: { system: "test", lat: 40.7128, lon: -74.0060, radius_m: 2000 },
+    });
+    const stops = getJsonContent(result);
+    const ids = stops.map((s: any) => s.stop_id);
+    // S1 (parent) included; S1N and S1S (children) excluded
+    expect(ids).toContain("S1");
+    expect(ids).not.toContain("S1N");
+    expect(ids).not.toContain("S1S");
+    // S1 is closer than S2 (Park Avenue, ~1km away)
+    expect(ids.indexOf("S1")).toBeLessThan(ids.indexOf("S2"));
+    expect(stops[0].distance_m).toBeLessThan(10);
+  });
+
+  it("respects radius_m", async () => {
+    // Tight radius around S1 excludes S2 (~1km away)
+    const result = await client.callTool({
+      name: "find_nearby_stops",
+      arguments: { system: "test", lat: 40.7128, lon: -74.0060, radius_m: 100 },
+    });
+    const stops = getJsonContent(result);
+    const ids = stops.map((s: any) => s.stop_id);
+    expect(ids).toContain("S1");
+    expect(ids).not.toContain("S2");
+  });
+
+  it("returns empty when nothing is in range", async () => {
+    const result = await client.callTool({
+      name: "find_nearby_stops",
+      arguments: { system: "test", lat: 0, lon: 0, radius_m: 1000 },
+    });
+    expect(getJsonContent(result)).toEqual([]);
+  });
+});
+
 describe("get_stop", () => {
   it("returns stop details with routes", async () => {
     const result = await client.callTool({

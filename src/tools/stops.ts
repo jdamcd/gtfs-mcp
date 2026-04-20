@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { searchStops, getStopDetails } from "../gtfs/queries.js";
+import { searchStops, getStopDetails, findStopsNearby } from "../gtfs/queries.js";
 import {
   type ToolContext,
   resolveSystem,
@@ -31,6 +31,35 @@ export function registerStopTools(ctx: ToolContext): void {
           name: s.stop_name,
           lat: s.stop_lat,
           lon: s.stop_lon,
+        }))
+      );
+    }
+  );
+
+  ctx.server.tool(
+    "find_nearby_stops",
+    "Find transit stops near a latitude/longitude, ordered by distance. Returns parent stations and standalone stops (not child platforms).",
+    {
+      system: z.string().describe("System ID"),
+      lat: z.number().describe("Latitude in decimal degrees"),
+      lon: z.number().describe("Longitude in decimal degrees"),
+      radius_m: z.number().default(500).describe("Search radius in meters"),
+      limit: z.number().default(10).describe("Maximum number of results"),
+    },
+    async ({ system, lat, lon, radius_m, limit }) => {
+      const config = resolveSystem(ctx.systems, system);
+      if (!config) return unknownSystemResponse(system);
+
+      const db = await getReadyDb(config, ctx.dataDir, ctx.refreshHours);
+      const stops = findStopsNearby(db, lat, lon, radius_m, limit);
+
+      return jsonResponse(
+        stops.map((s) => ({
+          stop_id: s.stop_id,
+          name: s.stop_name,
+          lat: s.stop_lat,
+          lon: s.stop_lon,
+          distance_m: s.distance_m,
         }))
       );
     }

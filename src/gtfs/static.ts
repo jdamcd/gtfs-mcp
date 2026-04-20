@@ -86,6 +86,9 @@ export function getDb(
 
   const dbPath = getSqlitePath(dataDir, system.id);
   const db = openDb({ sqlitePath: dbPath });
+  // The gtfs package doesn't index stop coordinates, so nearby-stop lookups
+  // otherwise scan the full stops table on every call.
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_stops_coords ON stops(stop_lat, stop_lon)`);
   dbConnections.set(system.id, db);
   return db;
 }

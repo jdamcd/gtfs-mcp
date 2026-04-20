@@ -48,6 +48,13 @@ tests:
       - type: javascript
         value: "output.includes('\"name\":\"search_stops\"')"
 
+  - description: "Stops: find near coordinates"
+    vars:
+      query: "What subway stops are near latitude 40.7580, longitude -73.9855?"
+    assert:
+      - type: javascript
+        value: "output.includes('\"name\":\"find_nearby_stops\"') && output.includes('40.758') && output.includes('-73.9855')"
+
   - description: "Stops: get details by ID"
     vars:
       query: "What routes serve stop 127N?"
