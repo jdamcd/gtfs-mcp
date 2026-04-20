@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
-    "promptfoo": "^0.121.2",
+    "promptfoo": "^0.121.5",
     "typescript": "^5.8.2",
     "vitest": "^4.1.0"
   }
