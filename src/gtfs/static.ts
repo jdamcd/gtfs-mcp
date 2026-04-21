@@ -1,5 +1,5 @@
 import { importGtfs, openDb } from "gtfs";
-import { existsSync, statSync, mkdirSync } from "node:fs";
+import { existsSync, statSync, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import type { SystemConfig } from "../config.js";
 import { applyAuth } from "../auth.js";
@@ -64,12 +64,22 @@ async function doImport(
   const { url, headers } = applyAuth(system.schedule_url, system.auth);
 
   console.error(`[gtfs-mcp] Importing GTFS data for ${system.name}...`);
-  await importGtfs({
-    agencies: [{ url, headers }],
-    sqlitePath: dbPath,
-    ignoreDuplicates: true,
-    verbose: false,
-  });
+  try {
+    await importGtfs({
+      agencies: [{ url, headers }],
+      sqlitePath: dbPath,
+      ignoreDuplicates: true,
+      verbose: false,
+    });
+  } catch (err) {
+    // Remove any partial DB so the next attempt starts clean instead of opening a corrupt file.
+    try {
+      unlinkSync(dbPath);
+    } catch {
+      // Already absent — fine.
+    }
+    throw err;
+  }
   console.error(`[gtfs-mcp] Import complete for ${system.name}`);
 
   loadedSystems.set(system.id, { loadedAt: Date.now() });

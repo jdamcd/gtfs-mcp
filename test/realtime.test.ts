@@ -87,6 +87,14 @@ describe("fetchFeed", () => {
     ).rejects.toThrow("404");
   });
 
+  it("throws on malformed protobuf body", async () => {
+    mockFetchResponse(new Uint8Array([0xff, 0xff, 0xff, 0xff]));
+
+    await expect(
+      fetchFeed("http://test/corrupt", null)
+    ).rejects.toThrow();
+  });
+
   it("passes auth headers when provided", async () => {
     const encoded = encodeTripUpdateFeed([]);
     const spy = mockFetchResponse(encoded);
@@ -177,6 +185,29 @@ describe("fetchAllFeeds", () => {
     );
 
     // Should still return entities from the good feed
+    expect(entities).toHaveLength(1);
+    expect(consoleError).toHaveBeenCalled();
+  });
+
+  it("skips feeds with malformed protobuf but returns others", async () => {
+    const goodFeed = encodeTripUpdateFeed([
+      { tripId: "T1", stopTimeUpdates: [] },
+    ]);
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      if (String(url).includes("corrupt")) {
+        return new Response(new Uint8Array([0xff, 0xff, 0xff, 0xff]), { status: 200 });
+      }
+      return new Response(goodFeed, { status: 200 });
+    });
+
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const entities = await fetchAllFeeds(
+      ["http://test/good", "http://test/corrupt"],
+      null
+    );
+
     expect(entities).toHaveLength(1);
     expect(consoleError).toHaveBeenCalled();
   });
