@@ -58,8 +58,13 @@ async function doImport(
 ): Promise<void> {
   mkdirSync(join(dataDir, system.id), { recursive: true });
 
-  // Clear cached connection for stale DB
-  dbConnections.delete(system.id);
+  // Close and drop any cached connection so the old file handle is released
+  // before importGtfs overwrites the DB.
+  const cached = dbConnections.get(system.id);
+  if (cached) {
+    cached.close();
+    dbConnections.delete(system.id);
+  }
 
   const { url, headers } = applyAuth(system.schedule_url, system.auth);
 

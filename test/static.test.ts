@@ -1,16 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdirSync, rmSync, existsSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, existsSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { SystemConfig } from "../src/config.js";
 
 vi.mock("gtfs", () => ({
   importGtfs: vi.fn(),
-  openDb: vi.fn(() => ({ exec: vi.fn() })),
+  openDb: vi.fn(() => ({ exec: vi.fn(), close: vi.fn() })),
 }));
 
-const { importGtfs } = await import("gtfs");
-const { ensureGtfsLoaded } = await import("../src/gtfs/static.js");
+const { importGtfs, openDb } = await import("gtfs");
+const { ensureGtfsLoaded, getDb } = await import("../src/gtfs/static.js");
 
 const TMP_ROOT = "/tmp/gtfs-mcp-test/static";
 
@@ -27,6 +27,8 @@ function makeSystem(): SystemConfig {
 
 beforeEach(() => {
   vi.mocked(importGtfs).mockReset();
+  vi.mocked(openDb).mockReset();
+  vi.mocked(openDb).mockImplementation(() => ({ exec: vi.fn(), close: vi.fn() }) as any);
   mkdirSync(TMP_ROOT, { recursive: true });
 });
 
@@ -73,5 +75,26 @@ describe("ensureGtfsLoaded", () => {
 
     // importGtfs throws without ever writing — unlink must not blow up.
     await expect(ensureGtfsLoaded(system, TMP_ROOT, 24)).rejects.toThrow("dns");
+  });
+
+  it("closes the cached DB connection before a refresh", async () => {
+    const system = makeSystem();
+    const dbPath = join(TMP_ROOT, system.id, "gtfs.db");
+
+    vi.mocked(importGtfs).mockImplementation(async ({ sqlitePath }: any) => {
+      writeFileSync(sqlitePath, "db");
+    });
+
+    const closeSpy = vi.fn();
+    vi.mocked(openDb).mockImplementation(() => ({ exec: vi.fn(), close: closeSpy }) as any);
+
+    await ensureGtfsLoaded(system, TMP_ROOT, 24);
+    getDb(system, TMP_ROOT);
+
+    // Remove the DB file so the next call re-imports instead of short-circuiting.
+    unlinkSync(dbPath);
+    await ensureGtfsLoaded(system, TMP_ROOT, 24);
+
+    expect(closeSpy).toHaveBeenCalledTimes(1);
   });
 });
