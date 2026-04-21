@@ -16,10 +16,23 @@ export const RealtimeConfigSchema = z.object({
   alerts: z.array(z.string()),
 });
 
+const TimezoneSchema = z.string().refine(
+  (tz) => {
+    try {
+      new Intl.DateTimeFormat("en-GB", { timeZone: tz });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  { message: "Invalid IANA timezone (e.g. 'America/New_York', 'Europe/London')" }
+);
+
 export const SystemConfigSchema = z.object({
   id: z.string(),
   name: z.string(),
   schedule_url: z.string(),
+  timezone: TimezoneSchema,
   realtime: RealtimeConfigSchema,
   auth: AuthConfigSchema.nullable(),
 });

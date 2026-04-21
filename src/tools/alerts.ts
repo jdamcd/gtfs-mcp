@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { fetchAllFeeds } from "../gtfs/realtime.js";
+import { formatLocalDateTime } from "../time.js";
 import type { Alert, ActivePeriod, InformedEntity } from "../types.js";
 import {
   type ToolContext,
@@ -60,10 +61,10 @@ export function registerAlertTools(ctx: ToolContext): void {
         const activePeriods: ActivePeriod[] = (a.activePeriod ?? []).map(
           (ap: any) => ({
             start: ap.start
-              ? new Date(Number(ap.start) * 1000).toLocaleString()
+              ? formatLocalDateTime(new Date(Number(ap.start) * 1000), config.timezone)
               : null,
             end: ap.end
-              ? new Date(Number(ap.end) * 1000).toLocaleString()
+              ? formatLocalDateTime(new Date(Number(ap.end) * 1000), config.timezone)
               : null,
           })
         );

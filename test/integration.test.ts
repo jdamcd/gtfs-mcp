@@ -2,6 +2,9 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { setupTestDb, cleanupTestDb, createTestConfig, getTextContent, getJsonContent, encodeTripUpdateFeed, encodeAlertFeed, encodeVehiclePositionFeed } from "./helpers.js";
+import { formatLocalTime } from "../src/time.js";
+
+const AGENCY_TZ = "America/New_York";
 
 // Mock static.ts before any imports use it
 let testDb: any;
@@ -118,9 +121,9 @@ afterAll(() => {
   cleanupTestDb(dbDir);
 });
 
-/** Convert UNIX seconds to local HH:MM:SS (matching the server's output format). */
+/** Convert UNIX seconds to HH:MM:SS in the agency's timezone (matching the server's output format). */
 function toLocalTimeString(unixSecs: number): string {
-  return new Date(unixSecs * 1000).toLocaleTimeString("en-GB", { hour12: false });
+  return formatLocalTime(new Date(unixSecs * 1000), AGENCY_TZ);
 }
 
 const HH_MM_SS = /^\d{2}:\d{2}:\d{2}$/;
@@ -322,10 +325,8 @@ describe("get_arrivals", () => {
 
   it("falls back to scheduled with HH:MM:SS local times", async () => {
     // S1S has no realtime data, so should fall back to scheduled.
-    // Pin clock so scheduled arrivals are in range.
-    const today = new Date();
-    today.setHours(7, 0, 0, 0);
-    vi.useFakeTimers({ now: today });
+    // Pin clock to 07:00 America/New_York so scheduled arrivals are in range.
+    vi.useFakeTimers({ now: new Date("2026-04-20T07:00:00-04:00") });
 
     const result = await client.callTool({
       name: "get_arrivals",
@@ -350,11 +351,9 @@ describe("get_arrivals", () => {
   });
 
   it("excludes past scheduled arrivals", async () => {
-    // Pin clock to 09:15 — T2 at S1S departs at 09:20, so it should appear.
+    // Pin clock to 09:15 America/New_York — T2 at S1S departs at 09:20, so it should appear.
     // But T3 at S1N departs at 07:30 which is in the past.
-    const today = new Date();
-    today.setHours(9, 15, 0, 0);
-    vi.useFakeTimers({ now: today });
+    vi.useFakeTimers({ now: new Date("2026-04-20T09:15:00-04:00") });
 
     const result = await client.callTool({
       name: "get_arrivals",

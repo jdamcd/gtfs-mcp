@@ -17,6 +17,7 @@ export function createTestConfig(overrides?: Partial<AppConfig>): AppConfig {
         id: "test",
         name: "Test Transit",
         schedule_url: "http://localhost/gtfs.zip",
+        timezone: "America/New_York",
         realtime: {
           trip_updates: ["http://localhost/trip-updates"],
           vehicle_positions: ["http://localhost/vehicle-positions"],

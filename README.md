@@ -37,6 +37,7 @@ To add your own systems, create a config file with the following structure:
       "id": "my-system",
       "name": "My Transit System",
       "schedule_url": "https://example.com/gtfs.zip",
+      "timezone": "America/New_York",
       "realtime": {
         "trip_updates": ["https://example.com/trip-updates"],
         "vehicle_positions": ["https://example.com/vehicle-positions"],
@@ -51,6 +52,8 @@ To add your own systems, create a config file with the following structure:
 ```
 
 Each realtime feed type accepts multiple URLs (e.g. MTA splits trip updates across 8 feeds). Set any feed type to `[]` if the system doesn't provide it.
+
+`timezone` is the agency's IANA timezone (e.g. `"America/New_York"`, `"Europe/London"`). It's used to compare scheduled stop times to "now" and to render times in responses, so the server produces the same results regardless of where it runs. The value matches `agency_timezone` in the system's GTFS `agency.txt`.
 
 ### Authenticated feeds
 

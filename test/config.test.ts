@@ -13,6 +13,7 @@ describe("AppConfigSchema", () => {
           id: "test",
           name: "Test",
           schedule_url: "http://example.com/gtfs.zip",
+          timezone: "America/New_York",
           realtime: {
             trip_updates: ["http://example.com/tu"],
             vehicle_positions: [],
@@ -23,8 +24,42 @@ describe("AppConfigSchema", () => {
       ],
     });
     expect(config.systems).toHaveLength(1);
+    expect(config.systems[0].timezone).toBe("America/New_York");
     expect(config.data_dir).toBe("~/.gtfs-mcp/data");
     expect(config.schedule_refresh_hours).toBe(24);
+  });
+
+  it("rejects missing timezone", () => {
+    expect(() =>
+      AppConfigSchema.parse({
+        systems: [
+          {
+            id: "test",
+            name: "Test",
+            schedule_url: "http://example.com/gtfs.zip",
+            realtime: { trip_updates: [], vehicle_positions: [], alerts: [] },
+            auth: null,
+          },
+        ],
+      })
+    ).toThrow();
+  });
+
+  it("rejects invalid IANA timezone", () => {
+    expect(() =>
+      AppConfigSchema.parse({
+        systems: [
+          {
+            id: "test",
+            name: "Test",
+            schedule_url: "http://example.com/gtfs.zip",
+            timezone: "Not/A_Real_Zone",
+            realtime: { trip_updates: [], vehicle_positions: [], alerts: [] },
+            auth: null,
+          },
+        ],
+      })
+    ).toThrow();
   });
 
   it("applies defaults for data_dir and schedule_refresh_hours", () => {
@@ -54,6 +89,7 @@ describe("AppConfigSchema", () => {
           id: "test",
           name: "Test",
           schedule_url: "http://example.com/gtfs.zip",
+          timezone: "America/New_York",
           realtime: { trip_updates: [], vehicle_positions: [], alerts: [] },
           auth: {
             type: "query_param",
@@ -74,6 +110,7 @@ describe("AppConfigSchema", () => {
             id: "test",
             name: "Test",
             schedule_url: "http://example.com/gtfs.zip",
+            timezone: "America/New_York",
             realtime: { trip_updates: [], vehicle_positions: [], alerts: [] },
             auth: { type: "invalid", key_env: "MY_KEY" },
           },
@@ -111,6 +148,7 @@ describe("loadConfig", () => {
             id: "test",
             name: "Test",
             schedule_url: "http://example.com/gtfs.zip",
+            timezone: "America/New_York",
             realtime: { trip_updates: [], vehicle_positions: [], alerts: [] },
             auth: null,
           },

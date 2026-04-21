@@ -4,6 +4,7 @@
       "id": "mta-subway",
       "name": "MTA New York City Subway",
       "schedule_url": "http://web.mta.info/developers/data/nyct/subway/google_transit.zip",
+      "timezone": "America/New_York",
       "realtime": {
         "trip_updates": [
           "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs",

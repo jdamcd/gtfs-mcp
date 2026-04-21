@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { fetchAllFeeds } from "../gtfs/realtime.js";
+import { formatLocalTime } from "../time.js";
 import type { VehiclePosition } from "../types.js";
 import {
   type ToolContext,
@@ -44,7 +45,7 @@ export function registerVehicleTools(ctx: ToolContext): void {
           bearing: pos.bearing ?? null,
           speed: pos.speed ?? null,
           timestamp: v.timestamp
-            ? new Date(Number(v.timestamp) * 1000).toLocaleTimeString("en-GB", { hour12: false })
+            ? formatLocalTime(new Date(Number(v.timestamp) * 1000), config.timezone)
             : null,
           stop_id: v.stopId ?? null,
           current_status:

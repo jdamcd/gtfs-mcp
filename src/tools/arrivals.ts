@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getScheduledArrivals, getStopName, resolveStopIds } from "../gtfs/queries.js";
 import { fetchAllFeeds } from "../gtfs/realtime.js";
+import { currentGtfsTime, formatLocalTime } from "../time.js";
 import type { Arrival } from "../types.js";
 import {
   type ToolContext,
@@ -9,14 +10,6 @@ import {
   jsonResponse,
   getReadyDb,
 } from "./helpers.js";
-
-function currentGtfsTime(): string {
-  const now = new Date();
-  const h = String(now.getHours()).padStart(2, "0");
-  const m = String(now.getMinutes()).padStart(2, "0");
-  const s = String(now.getSeconds()).padStart(2, "0");
-  return `${h}:${m}:${s}`;
-}
 
 /** Extract a UNIX timestamp in ms from a protobuf Long/number time field. Returns null if unset (zero). */
 function extractTime(time: unknown): number | null {
@@ -82,7 +75,7 @@ export function registerArrivalTools(ctx: ToolContext): void {
           if (!arrivalTime) continue;
 
           const arrivalDate = new Date(arrivalTime);
-          const arrivalLocal = arrivalDate.toLocaleTimeString("en-GB", { hour12: false });
+          const arrivalLocal = formatLocalTime(arrivalDate, config.timezone);
           const minutesAway = Math.round((arrivalTime - Date.now()) / 60_000);
 
           realtimeArrivals.push({
@@ -111,7 +104,7 @@ export function registerArrivalTools(ctx: ToolContext): void {
         stopIds,
         route_id,
         limit,
-        currentGtfsTime()
+        currentGtfsTime(config.timezone)
       );
 
       const arrivals: Arrival[] = scheduled.map((s) => ({
