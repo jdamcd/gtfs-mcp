@@ -1,0 +1,285 @@
+{
+  "systems": [
+    {
+      "id": "mta-subway",
+      "name": "MTA New York City Subway",
+      "schedule_url": "http://web.mta.info/developers/data/nyct/subway/google_transit.zip",
+      "timezone": "America/New_York",
+      "realtime": {
+        "trip_updates": [
+          "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs",
+          "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm",
+          "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-ace",
+          "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-nqrw",
+          "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-jz",
+          "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-l",
+          "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-g",
+          "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-si"
+        ],
+        "vehicle_positions": [],
+        "alerts": [
+          "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fsubway-alerts"
+        ]
+      },
+      "auth": null
+    },
+    {
+      "id": "vbb",
+      "name": "VBB Berlin-Brandenburg",
+      "schedule_url": "http://vbb.de/vbbgtfs",
+      "timezone": "Europe/Berlin",
+      "realtime": {
+        "trip_updates": ["https://production.gtfsrt.vbb.de/data"],
+        "vehicle_positions": [],
+        "alerts": []
+      },
+      "auth": null
+    },
+    {
+      "id": "renfe",
+      "name": "Renfe Spain",
+      "schedule_url": "https://ssl.renfe.com/ftransit/Fichero_CER_FOMENTO/fomento_transit.zip",
+      "timezone": "Europe/Madrid",
+      "realtime": {
+        "trip_updates": ["https://gtfsrt.renfe.com/trip_updates.pb"],
+        "vehicle_positions": ["https://gtfsrt.renfe.com/vehicle_positions.pb"],
+        "alerts": ["https://gtfsrt.renfe.com/alerts.pb"]
+      },
+      "auth": null
+    },
+    {
+      "id": "pid",
+      "name": "PID Prague Integrated Transport",
+      "schedule_url": "http://data.pid.cz/PID_GTFS.zip",
+      "timezone": "Europe/Prague",
+      "realtime": {
+        "trip_updates": ["https://api.golemio.cz/v2/vehiclepositions/gtfsrt/trip_updates.pb"],
+        "vehicle_positions": ["https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb"],
+        "alerts": ["https://api.golemio.cz/v2/vehiclepositions/gtfsrt/alerts.pb"]
+      },
+      "auth": null
+    },
+    {
+      "id": "sncf",
+      "name": "SNCF France",
+      "schedule_url": "https://www.data.gouv.fr/api/1/datasets/r/9ae758ec-cd7a-40cd-a890-bb3963224942",
+      "timezone": "Europe/Paris",
+      "realtime": {
+        "trip_updates": [
+          "https://proxy.transport.data.gouv.fr/resource/sncf-gtfs-rt-trip-updates?token=xdgqKBTAzhw4DSPz6zeGc4c5eW0LhwztcGv4-vpzP4U"
+        ],
+        "vehicle_positions": [],
+        "alerts": [
+          "https://proxy.transport.data.gouv.fr/resource/sncf-gtfs-rt-service-alerts?token=xdgqKBTAzhw4DSPz6zeGc4c5eW0LhwztcGv4-vpzP4U"
+        ]
+      },
+      "auth": null
+    },
+    {
+      "id": "amb",
+      "name": "AMB Barcelona Metropolitan Buses",
+      "schedule_url": "https://www.ambmobilitat.cat/OpenData/google_transit.zip",
+      "timezone": "Europe/Madrid",
+      "realtime": {
+        "trip_updates": ["https://www.ambmobilitat.cat/transit/trips-updates/trips.bin"],
+        "vehicle_positions": [],
+        "alerts": ["https://www.ambmobilitat.cat/transit/alerts/alerts.bin"]
+      },
+      "auth": null
+    },
+    {
+      "id": "emt-madrid",
+      "name": "EMT Madrid City Buses",
+      "schedule_url": "https://servicios.emtmadrid.es:8443/gtfs/transitemt.zip",
+      "timezone": "Europe/Madrid",
+      "realtime": {
+        "trip_updates": [],
+        "vehicle_positions": [],
+        "alerts": ["https://openapi.emtmadrid.es/v1/bus/servicealerts/proto"]
+      },
+      "auth": null
+    },
+    {
+      "id": "roma",
+      "name": "Roma Servizi per la Mobilita",
+      "schedule_url": "https://romamobilita.it/sites/default/files/rome_static_gtfs.zip",
+      "timezone": "Europe/Rome",
+      "realtime": {
+        "trip_updates": ["https://romamobilita.it/sites/default/files/rome_rtgtfs_trip_updates_feed.pb"],
+        "vehicle_positions": ["https://romamobilita.it/sites/default/files/rome_rtgtfs_vehicle_positions_feed.pb"],
+        "alerts": ["https://romamobilita.it/sites/default/files/rome_rtgtfs_service_alerts_feed.pb"]
+      },
+      "auth": null
+    },
+    {
+      "id": "bart",
+      "name": "BART San Francisco Bay Area",
+      "schedule_url": "http://www.bart.gov/dev/schedules/google_transit.zip",
+      "timezone": "America/Los_Angeles",
+      "realtime": {
+        "trip_updates": ["http://api.bart.gov/gtfsrt/tripupdate.aspx"],
+        "vehicle_positions": [],
+        "alerts": ["http://api.bart.gov/gtfsrt/alerts.aspx"]
+      },
+      "auth": null
+    },
+    {
+      "id": "mbta",
+      "name": "MBTA Boston",
+      "schedule_url": "https://cdn.mbta.com/MBTA_GTFS.zip",
+      "timezone": "America/New_York",
+      "realtime": {
+        "trip_updates": ["https://cdn.mbta.com/realtime/TripUpdates.pb"],
+        "vehicle_positions": ["https://cdn.mbta.com/realtime/VehiclePositions.pb"],
+        "alerts": ["https://cdn.mbta.com/realtime/Alerts.pb"]
+      },
+      "auth": null
+    },
+    {
+      "id": "septa-bus",
+      "name": "SEPTA Philadelphia (Bus/Trolley)",
+      "schedule_url": "https://www3.septa.org/developer/google_bus.zip",
+      "timezone": "America/New_York",
+      "realtime": {
+        "trip_updates": ["https://www3.septa.org/gtfsrt/septa-pa-us/Trip/rtTripUpdates.pb"],
+        "vehicle_positions": ["https://www3.septa.org/gtfsrt/septa-pa-us/Vehicle/rtVehiclePosition.pb"],
+        "alerts": ["https://www3.septa.org/gtfsrt/septa-pa-us/Service/rtServiceAlerts.pb"]
+      },
+      "auth": null
+    },
+    {
+      "id": "septa-rail",
+      "name": "SEPTA Regional Rail",
+      "schedule_url": "https://www3.septa.org/developer/google_rail.zip",
+      "timezone": "America/New_York",
+      "realtime": {
+        "trip_updates": ["https://www3.septa.org/gtfsrt/septarail-pa-us/Trip/rtTripUpdates.pb"],
+        "vehicle_positions": ["https://www3.septa.org/gtfsrt/septarail-pa-us/Vehicle/rtVehiclePosition.pb"],
+        "alerts": ["https://www3.septa.org/gtfsrt/septarail-pa-us/Service/rtServiceAlerts.pb"]
+      },
+      "auth": null
+    },
+    {
+      "id": "la-metro",
+      "name": "LA Metro",
+      "schedule_url": "https://gitlab.com/LACMTA/gtfs_bus/raw/master/gtfs_bus.zip",
+      "timezone": "America/Los_Angeles",
+      "realtime": {
+        "trip_updates": [],
+        "vehicle_positions": [],
+        "alerts": ["https://s3.amazonaws.com/la-alerts-prod/alerts.pb"]
+      },
+      "auth": null
+    },
+    {
+      "id": "kcm",
+      "name": "King County Metro Seattle",
+      "schedule_url": "https://gtfs.sound.obaweb.org/prod/1_gtfs.zip",
+      "timezone": "America/Los_Angeles",
+      "realtime": {
+        "trip_updates": ["https://s3.amazonaws.com/kcm-alerts-realtime-prod/tripupdates.pb"],
+        "vehicle_positions": ["https://s3.amazonaws.com/kcm-alerts-realtime-prod/vehiclepositions.pb"],
+        "alerts": ["https://s3.amazonaws.com/kcm-alerts-realtime-prod/alerts.pb"]
+      },
+      "auth": null
+    },
+    {
+      "id": "ctrans",
+      "name": "Community Transit Snohomish County",
+      "schedule_url": "https://www.communitytransit.org/docs/default-source/open-data/gtfs/current.zip",
+      "timezone": "America/Los_Angeles",
+      "realtime": {
+        "trip_updates": ["https://s3.amazonaws.com/commtrans-realtime-prod/tripupdates.pb"],
+        "vehicle_positions": ["https://s3.amazonaws.com/commtrans-realtime-prod/vehiclepositions.pb"],
+        "alerts": ["https://s3.amazonaws.com/commtrans-realtime-prod/alerts.pb"]
+      },
+      "auth": null
+    },
+    {
+      "id": "paac-bus",
+      "name": "PAAC Pittsburgh Bus",
+      "schedule_url": "https://www.portauthority.org/developerresources/GTFS.zip",
+      "timezone": "America/New_York",
+      "realtime": {
+        "trip_updates": ["https://truetime.portauthority.org/gtfsrt-bus/trips"],
+        "vehicle_positions": ["https://truetime.portauthority.org/gtfsrt-bus/vehicles"],
+        "alerts": ["https://truetime.portauthority.org/gtfsrt-bus/alerts"]
+      },
+      "auth": null
+    },
+    {
+      "id": "paac-lrt",
+      "name": "PAAC Pittsburgh Light Rail (T)",
+      "schedule_url": "https://www.portauthority.org/developerresources/GTFS.zip",
+      "timezone": "America/New_York",
+      "realtime": {
+        "trip_updates": ["http://truetime.portauthority.org/gtfsrt-train/trips"],
+        "vehicle_positions": ["http://truetime.portauthority.org/gtfsrt-train/vehicles"],
+        "alerts": ["http://truetime.portauthority.org/gtfsrt-train/alerts"]
+      },
+      "auth": null
+    },
+    {
+      "id": "marta",
+      "name": "MARTA Atlanta",
+      "schedule_url": "https://www.itsmarta.com/google_transit_feed/google_transit.zip",
+      "timezone": "America/New_York",
+      "realtime": {
+        "trip_updates": ["https://gtfs-rt.itsmarta.com/TMGTFSRealTimeWebService/tripupdate/tripupdates.pb"],
+        "vehicle_positions": ["https://gtfs-rt.itsmarta.com/TMGTFSRealTimeWebService/vehicle/vehiclepositions.pb"],
+        "alerts": []
+      },
+      "auth": null
+    },
+    {
+      "id": "capmetro",
+      "name": "CapMetro Austin",
+      "schedule_url": "https://data.texas.gov/download/r4v4-vz24/application/zip",
+      "timezone": "America/Chicago",
+      "realtime": {
+        "trip_updates": ["https://data.texas.gov/download/rmk2-acnw/application%2Foctet-stream"],
+        "vehicle_positions": ["https://data.texas.gov/download/eiei-9rpf/application%2Foctet-stream"],
+        "alerts": ["https://data.texas.gov/download/9zu9-jwr2/text%2Fplain"]
+      },
+      "auth": null
+    },
+    {
+      "id": "valleymetro",
+      "name": "Valley Metro Phoenix",
+      "schedule_url": "https://phoenixopendata.com/dataset/3eae9a4a-98b9-40c8-8df7-8c00c1756235/resource/28ccc0a5-49c8-495c-b91f-193de5ce2cb7/download/googletransit.zip",
+      "timezone": "America/Phoenix",
+      "realtime": {
+        "trip_updates": ["https://app.mecatran.com/utw/ws/gtfsfeed/realtime/valleymetro?apiKey=4f22263f69671d7f49726c3011333e527368211f"],
+        "vehicle_positions": ["https://app.mecatran.com/utw/ws/gtfsfeed/vehicles/valleymetro?apiKey=4f22263f69671d7f49726c3011333e527368211f"],
+        "alerts": ["https://app.mecatran.com/utw/ws/gtfsfeed/alerts/valleymetro?apiKey=4f22263f69671d7f49726c3011333e527368211f"]
+      },
+      "auth": null
+    },
+    {
+      "id": "mdmta-marc",
+      "name": "Maryland MTA MARC Commuter Rail",
+      "schedule_url": "https://mdotmta-gtfs.s3.amazonaws.com/mdotmta_gtfs_marc.zip",
+      "timezone": "America/New_York",
+      "realtime": {
+        "trip_updates": ["https://mdotmta-gtfs-rt.s3.amazonaws.com/MARC+RT/marc.pb"],
+        "vehicle_positions": ["https://mdotmta-gtfs-rt.s3.amazonaws.com/MARC+RT/marc.pb"],
+        "alerts": ["https://feeds.mta.maryland.gov/alerts.pb"]
+      },
+      "auth": null
+    },
+    {
+      "id": "vre",
+      "name": "Virginia Railway Express",
+      "schedule_url": "https://gtfs.vre.org/containercdngtfsupload/google_transit.zip",
+      "timezone": "America/New_York",
+      "realtime": {
+        "trip_updates": ["http://www.vre.org/gtfs-realtime/TripUpdateFeed"],
+        "vehicle_positions": ["http://www.vre.org/gtfs-realtime/VehiclePositionFeed"],
+        "alerts": []
+      },
+      "auth": null
+    }
+  ],
+  "data_dir": "./data-testing",
+  "schedule_refresh_hours": 168
+}

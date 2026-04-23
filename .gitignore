@@ -5,3 +5,5 @@ dist/
 .DS_Store
 .env
 promptfoo_results/
+data-testing/
+campaign-results/
