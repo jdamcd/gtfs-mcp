@@ -53,3 +53,10 @@ export function formatLocalDateTime(date: Date, timezone: string): string {
   const p = parts(date, timezone);
   return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
 }
+
+/** UNIX timestamp in ms from a protobuf Long/number time field. null if unset (zero). */
+export function extractRtTime(time: unknown): number | null {
+  if (time == null) return null;
+  const n = Number(time);
+  return n > 0 ? n * 1000 : null;
+}

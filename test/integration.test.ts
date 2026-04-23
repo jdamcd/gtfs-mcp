@@ -56,6 +56,14 @@ beforeAll(async () => {
         { stopId: "S2", departureTime: nowSecs + 610, departureDelay: 120 },
       ],
     },
+    {
+      tripId: "T_RT_ONLY",
+      routeId: "R2",
+      stopTimeUpdates: [
+        { stopId: "S2", arrivalTime: s2ArrivalSecs, arrivalDelay: 30 },
+        { stopId: "S3", arrivalTime: s3ArrivalSecs, arrivalDelay: 45 },
+      ],
+    },
   ]);
 
   const alertData = encodeAlertFeed([
@@ -148,6 +156,17 @@ describe("search_stops", () => {
     expect(stops[0]).toHaveProperty("name");
     expect(stops[0]).toHaveProperty("lat");
     expect(stops[0]).toHaveProperty("lon");
+  });
+
+  it("excludes child platforms when their parent station matches", async () => {
+    const result = await client.callTool({
+      name: "search_stops",
+      arguments: { system: "test", query: "Central" },
+    });
+    const ids = getJsonContent(result).map((s: any) => s.stop_id);
+    expect(ids).toContain("S1");
+    expect(ids).not.toContain("S1N");
+    expect(ids).not.toContain("S1S");
   });
 
   it("returns error for unknown system", async () => {
@@ -251,6 +270,15 @@ describe("get_route", () => {
     const data = getJsonContent(result);
     expect(data.route.route_id).toBe("R1");
     expect(data.stops.map((s: any) => s.stop_id)).toEqual(["S1N", "S2", "S3"]);
+  });
+
+  it("picks the longest trip variant when multiple exist for the same direction", async () => {
+    const result = await client.callTool({
+      name: "get_route",
+      arguments: { system: "test", route_id: "R1", direction_id: 0 },
+    });
+    const ids = getJsonContent(result).stops.map((s: any) => s.stop_id);
+    expect(ids).toEqual(["S1N", "S2", "S3"]);
   });
 
   it("returns not found for invalid route", async () => {
@@ -467,6 +495,27 @@ describe("get_trip", () => {
       arguments: { system: "test", trip_id: "INVALID" },
     });
     expect(getTextContent(result)).toContain("not found");
+  });
+
+  it("synthesises a response for trip_ids that exist only in realtime", async () => {
+    const result = await client.callTool({
+      name: "get_trip",
+      arguments: { system: "test", trip_id: "T_RT_ONLY" },
+    });
+    const data = getJsonContent(result);
+    expect(data.trip.trip_id).toBe("T_RT_ONLY");
+    expect(data.trip.route_id).toBe("R2");
+    expect(data.trip.service_id).toBeNull();
+    // Headsign synthesised from the last stop's name (S3 = Times Square)
+    expect(data.trip.trip_headsign).toBe("Times Square");
+    expect(data.stop_times.length).toBe(2);
+    for (const st of data.stop_times) {
+      expect(st.is_realtime).toBe(true);
+      expect(st.arrival_time).toMatch(HH_MM_SS);
+    }
+    expect(data.stop_times.map((st: any) => st.stop_id)).toEqual(["S2", "S3"]);
+    expect(data.stop_times[0].arrival_delay_seconds).toBe(30);
+    expect(data.stop_times[1].arrival_delay_seconds).toBe(45);
   });
 });
 

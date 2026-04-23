@@ -111,6 +111,8 @@ export function searchStops(
     `SELECT stop_id, stop_name, stop_lat, stop_lon, stop_code, location_type, parent_station
      FROM stops
      WHERE stop_name LIKE ?
+       AND (parent_station IS NULL OR parent_station = '')
+       AND (location_type IS NULL OR location_type IN (0, 1))
      LIMIT ?`
   );
   return stmt.all(`%${query}%`, limit) as StopResult[];
@@ -218,16 +220,20 @@ export function getRouteDetails(
     return { route: null, stops: [] };
   }
 
-  // Get ordered stops for one representative trip on this route
-  let tripQuery = `SELECT trip_id FROM trips WHERE route_id = ?`;
+  // Pick the longest trip variant as representative — a bare LIMIT 1 returns
+  // whatever SQLite finds first, which often lands on short-turn or branch
+  // variants (e.g. the 8-stop Rockaway Park shuttle instead of the 58-stop A).
+  let tripQuery = `SELECT t.trip_id FROM trips t
+                   INNER JOIN stop_times st ON t.trip_id = st.trip_id
+                   WHERE t.route_id = ?`;
   const tripParams: any[] = [routeId];
 
   if (directionId !== undefined) {
-    tripQuery += ` AND direction_id = ?`;
+    tripQuery += ` AND t.direction_id = ?`;
     tripParams.push(directionId);
   }
 
-  tripQuery += ` LIMIT 1`;
+  tripQuery += ` GROUP BY t.trip_id ORDER BY COUNT(st.stop_sequence) DESC LIMIT 1`;
   const trip = db.prepare(tripQuery).get(...tripParams);
 
   if (!trip) {

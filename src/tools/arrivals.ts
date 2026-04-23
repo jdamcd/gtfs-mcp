@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { getScheduledArrivals, getStopName, resolveStopIds } from "../gtfs/queries.js";
 import { fetchAllFeeds } from "../gtfs/realtime.js";
-import { currentGtfsTime, formatLocalTime } from "../time.js";
+import { currentGtfsTime, extractRtTime, formatLocalTime } from "../time.js";
 import type { Arrival } from "../types.js";
 import {
   type ToolContext,
@@ -10,13 +10,6 @@ import {
   jsonResponse,
   getReadyDb,
 } from "./helpers.js";
-
-/** Extract a UNIX timestamp in ms from a protobuf Long/number time field. Returns null if unset (zero). */
-function extractTime(time: unknown): number | null {
-  if (time == null) return null;
-  const n = Number(time);
-  return n > 0 ? n * 1000 : null;
-}
 
 export function registerArrivalTools(ctx: ToolContext): void {
   ctx.server.tool(
@@ -71,7 +64,7 @@ export function registerArrivalTools(ctx: ToolContext): void {
         for (const stu of stopTimeUpdates) {
           if (!stu.stopId || !stopIdSet.has(stu.stopId)) continue;
 
-          const arrivalTime = extractTime(stu.arrival?.time);
+          const arrivalTime = extractRtTime(stu.arrival?.time);
           if (!arrivalTime) continue;
 
           const arrivalDate = new Date(arrivalTime);

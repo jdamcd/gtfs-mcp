@@ -1,6 +1,8 @@
+import type { transit_realtime as TransitRealtime } from "gtfs-realtime-bindings";
 import { z } from "zod";
-import { getTripDetails } from "../gtfs/queries.js";
+import { getStopName, getTripDetails } from "../gtfs/queries.js";
 import { fetchAllFeeds } from "../gtfs/realtime.js";
+import { extractRtTime, formatLocalTime } from "../time.js";
 import {
   type ToolContext,
   resolveSystem,
@@ -25,22 +27,24 @@ export function registerTripTools(ctx: ToolContext): void {
       const db = await getReadyDb(config, ctx.dataDir, ctx.refreshHours);
       const details = getTripDetails(db, trip_id);
 
-      if (!details.trip) {
-        return textResponse(`Trip not found: ${trip_id}`);
-      }
-
-      // Fetch realtime updates for this trip
       const entities = await fetchAllFeeds(
         config.realtime.trip_updates,
         config.auth
       );
-
-      // Find matching trip update
       const tripUpdate = entities.find(
         (e) => e.tripUpdate?.trip?.tripId === trip_id
       )?.tripUpdate;
 
-      // Build stop time update map
+      if (!details.trip) {
+        // Synthesise from RT when the trip_id is only in the realtime feed
+        // (e.g. MTA's `069300_A..S58R` synthetic trip_ids that don't exist in
+        // the static schedule).
+        if (!tripUpdate) {
+          return textResponse(`Trip not found: ${trip_id}`);
+        }
+        return jsonResponse(synthesiseTripFromRt(db, config.timezone, trip_id, tripUpdate));
+      }
+
       const realtimeByStop = new Map<
         string,
         { arrivalDelay: number | null; departureDelay: number | null }
@@ -56,7 +60,6 @@ export function registerTripTools(ctx: ToolContext): void {
         }
       }
 
-      // Merge stop times with realtime
       const stopTimes = details.stop_times.map((st) => {
         const rt = realtimeByStop.get(st.stop_id);
         return {
@@ -83,4 +86,48 @@ export function registerTripTools(ctx: ToolContext): void {
       });
     }
   );
+}
+
+function synthesiseTripFromRt(
+  db: any,
+  timezone: string,
+  tripId: string,
+  tripUpdate: TransitRealtime.ITripUpdate
+) {
+  const stopTimeUpdates = tripUpdate.stopTimeUpdate ?? [];
+  const lastStopId = stopTimeUpdates.at(-1)?.stopId ?? null;
+
+  const nameCache = new Map<string, string | null>();
+  const resolveName = (stopId: string): string | null => {
+    if (!nameCache.has(stopId)) {
+      nameCache.set(stopId, getStopName(db, stopId));
+    }
+    return nameCache.get(stopId)!;
+  };
+
+  const stopTimes = stopTimeUpdates.map((stu, idx) => {
+    const arrivalMs = extractRtTime(stu.arrival?.time);
+    const departureMs = extractRtTime(stu.departure?.time);
+    return {
+      stop_id: stu.stopId ?? null,
+      stop_name: stu.stopId ? resolveName(stu.stopId) : null,
+      stop_sequence: stu.stopSequence ?? idx,
+      arrival_time: arrivalMs ? formatLocalTime(new Date(arrivalMs), timezone) : null,
+      departure_time: departureMs ? formatLocalTime(new Date(departureMs), timezone) : null,
+      arrival_delay_seconds: stu.arrival?.delay ?? null,
+      departure_delay_seconds: stu.departure?.delay ?? null,
+      is_realtime: true,
+    };
+  });
+
+  return {
+    trip: {
+      trip_id: tripId,
+      route_id: tripUpdate.trip?.routeId ?? null,
+      service_id: null,
+      trip_headsign: lastStopId ? resolveName(lastStopId) : null,
+      direction_id: tripUpdate.trip?.directionId ?? null,
+    },
+    stop_times: stopTimes,
+  };
 }

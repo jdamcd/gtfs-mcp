@@ -32,6 +32,7 @@ S3,Times Square,40.7580,-73.9855,0,`,
   "trips.txt": `route_id,service_id,trip_id,trip_headsign,direction_id
 R1,WEEKDAY,T1,Uptown,0
 R1,WEEKDAY,T2,Downtown,1
+R1,WEEKDAY,T4,Uptown Short,0
 R2,WEEKDAY,T3,Eastbound,0`,
 
   "stop_times.txt": `trip_id,arrival_time,departure_time,stop_id,stop_sequence,stop_headsign
@@ -42,7 +43,9 @@ T2,09:00:00,09:01:00,S3,1,
 T2,09:10:00,09:11:00,S2,2,
 T2,09:20:00,09:21:00,S1S,3,
 T3,07:30:00,07:31:00,S1N,1,
-T3,07:45:00,07:46:00,S2,2,`,
+T3,07:45:00,07:46:00,S2,2,
+T4,08:30:00,08:31:00,S1N,1,
+T4,08:40:00,08:41:00,S2,2,`,
 };
 
 for (const [name, content] of Object.entries(files)) {
