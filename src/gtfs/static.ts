@@ -75,6 +75,9 @@ async function doImport(
       sqlitePath: dbPath,
       ignoreDuplicates: true,
       verbose: false,
+      // The gtfs package default is 30s, which is too short for large feeds
+      // (VBB Berlin, Paris metro, etc.). Allow up to 5 minutes.
+      downloadTimeout: 300_000,
     });
   } catch (err) {
     // Remove any partial DB so the next attempt starts clean instead of opening a corrupt file.
