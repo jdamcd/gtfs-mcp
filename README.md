@@ -112,7 +112,7 @@ Add any API keys your systems need to the `env` block.
 | `find_nearby_stops` | Stops near a coordinate, ordered by distance | `system`, `lat`, `lon`, `radius_m?`, `limit?` |
 | `get_stop` | Stop details and routes serving it | `system`, `stop_id` |
 | `get_arrivals` | Upcoming arrivals with realtime delays | `system`, `stop_id`, `route_id?`, `limit?` |
-| `list_routes` | All routes in a system | `system`, `route_type?` |
+| `list_routes` | Routes in a system, with optional name filter and pagination | `system`, `query?`, `route_type?`, `limit?`, `offset?` |
 | `get_route` | Route details with ordered stop list | `system`, `route_id`, `direction_id?` |
 | `get_alerts` | Active service alerts | `system`, `route_id?`, `stop_id?` |
 | `get_vehicles` | Live vehicle positions | `system`, `route_id?` |
@@ -127,7 +127,7 @@ The `system` parameter is the system ID from your config (e.g. `"mta-subway"`).
 
 **GTFS-RT** feeds (trip updates, vehicle positions, alerts) are fetched on demand with a 30-second in-memory cache. Systems with multiple feeds (MTA has 8 trip update feeds) are fetched in parallel and merged.
 
-**Arrivals** merges both sources: scheduled stop times from SQLite are overlaid with realtime delays and added trips from GTFS-RT trip update feeds.
+**Arrivals** merge realtime and scheduled in a single stream. Realtime is authoritative within its horizon (per stop and route), scheduled fills in beyond. Cancelled trips and skipped stops drop out; trips that only exist in realtime (e.g. added service) come through. Scheduled arrivals honor today's active `service_id` from `calendar.txt` / `calendar_dates.txt`, and services that roll past midnight (`25:30:00`-style stop times) are rendered in wall-clock time for the current calendar day.
 
 ## Testing
 
