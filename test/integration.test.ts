@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { setupTestDb, cleanupTestDb, createTestConfig, getTextContent, getJsonContent, encodeTripUpdateFeed, encodeAlertFeed, encodeVehiclePositionFeed } from "./helpers.js";
-import { formatLocalTime } from "../src/time.js";
+import { formatLocalTime, GTFS_TIME_PATTERN } from "../src/time.js";
 
 const AGENCY_TZ = "America/New_York";
 
@@ -133,8 +133,6 @@ afterAll(() => {
 function toLocalTimeString(unixSecs: number): string {
   return formatLocalTime(new Date(unixSecs * 1000), AGENCY_TZ);
 }
-
-const HH_MM_SS = /^\d{2}:\d{2}:\d{2}$/;
 
 describe("list_systems", () => {
   it("returns configured systems", async () => {
@@ -304,7 +302,7 @@ describe("get_arrivals", () => {
       expect(a.is_realtime).toBe(true);
       expect(a.minutes_away).toBeTypeOf("number");
       // Times must be HH:MM:SS local format, not ISO/UTC
-      expect(a.arrival_time).toMatch(HH_MM_SS);
+      expect(a.arrival_time).toMatch(GTFS_TIME_PATTERN);
     }
 
     const t1Arrival = arrivals.find((a: any) => a.trip_id === "T1");
@@ -367,7 +365,7 @@ describe("get_arrivals", () => {
       expect(a.is_realtime).toBe(false);
       expect(a.minutes_away).toBeNull();
       // Scheduled times must also be HH:MM:SS format
-      expect(a.arrival_time).toMatch(HH_MM_SS);
+      expect(a.arrival_time).toMatch(GTFS_TIME_PATTERN);
     }
 
     // T2 arrives at S1S at 09:20:00 in fixtures
@@ -511,7 +509,7 @@ describe("get_trip", () => {
     expect(data.stop_times.length).toBe(2);
     for (const st of data.stop_times) {
       expect(st.is_realtime).toBe(true);
-      expect(st.arrival_time).toMatch(HH_MM_SS);
+      expect(st.arrival_time).toMatch(GTFS_TIME_PATTERN);
     }
     expect(data.stop_times.map((st: any) => st.stop_id)).toEqual(["S2", "S3"]);
     expect(data.stop_times[0].arrival_delay_seconds).toBe(30);

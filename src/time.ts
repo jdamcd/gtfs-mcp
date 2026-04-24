@@ -60,3 +60,6 @@ export function extractRtTime(time: unknown): number | null {
   const n = Number(time);
   return n > 0 ? n * 1000 : null;
 }
+
+/** Matches the HH:MM:SS shape produced by formatLocalTime / currentGtfsTime. */
+export const GTFS_TIME_PATTERN = /^\d{2}:\d{2}:\d{2}$/;

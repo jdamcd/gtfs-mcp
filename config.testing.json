@@ -112,18 +112,6 @@
       "auth": null
     },
     {
-      "id": "bart",
-      "name": "BART San Francisco Bay Area",
-      "schedule_url": "http://www.bart.gov/dev/schedules/google_transit.zip",
-      "timezone": "America/Los_Angeles",
-      "realtime": {
-        "trip_updates": ["http://api.bart.gov/gtfsrt/tripupdate.aspx"],
-        "vehicle_positions": [],
-        "alerts": ["http://api.bart.gov/gtfsrt/alerts.aspx"]
-      },
-      "auth": null
-    },
-    {
       "id": "mbta",
       "name": "MBTA Boston",
       "schedule_url": "https://cdn.mbta.com/MBTA_GTFS.zip",
@@ -240,18 +228,6 @@
         "trip_updates": ["https://data.texas.gov/download/rmk2-acnw/application%2Foctet-stream"],
         "vehicle_positions": ["https://data.texas.gov/download/eiei-9rpf/application%2Foctet-stream"],
         "alerts": ["https://data.texas.gov/download/9zu9-jwr2/text%2Fplain"]
-      },
-      "auth": null
-    },
-    {
-      "id": "valleymetro",
-      "name": "Valley Metro Phoenix",
-      "schedule_url": "https://phoenixopendata.com/dataset/3eae9a4a-98b9-40c8-8df7-8c00c1756235/resource/28ccc0a5-49c8-495c-b91f-193de5ce2cb7/download/googletransit.zip",
-      "timezone": "America/Phoenix",
-      "realtime": {
-        "trip_updates": ["https://app.mecatran.com/utw/ws/gtfsfeed/realtime/valleymetro?apiKey=4f22263f69671d7f49726c3011333e527368211f"],
-        "vehicle_positions": ["https://app.mecatran.com/utw/ws/gtfsfeed/vehicles/valleymetro?apiKey=4f22263f69671d7f49726c3011333e527368211f"],
-        "alerts": ["https://app.mecatran.com/utw/ws/gtfsfeed/alerts/valleymetro?apiKey=4f22263f69671d7f49726c3011333e527368211f"]
       },
       "auth": null
     },
