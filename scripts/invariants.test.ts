@@ -142,18 +142,34 @@ describe("AR-01 / AR-03 / AR-04 get_arrivals", () => {
 
   it("flags unsorted arrivals", () => {
     const rec = ok("get_arrivals", {}, arrivalsResp([
-      { trip_id: "T1", stop_id: "S1", arrival_time: "08:10:00", is_realtime: true },
-      { trip_id: "T2", stop_id: "S1", arrival_time: "08:05:00", is_realtime: true },
+      { trip_id: "T1", stop_id: "S1", arrival_time: "08:10:00", minutes_away: 20, is_realtime: true },
+      { trip_id: "T2", stop_id: "S1", arrival_time: "08:05:00", minutes_away: 15, is_realtime: true },
     ]));
     expect(ruleIds(rec, ctx())).toContain("AR-04");
   });
 
-  it("flags duplicate (trip_id, stop_id)", () => {
+  it("does not flag midnight-crossing arrivals with monotonic minutes_away", () => {
+    const rec = ok("get_arrivals", {}, arrivalsResp([
+      { trip_id: "T1", stop_id: "S1", arrival_time: "23:59:00", minutes_away: 29, is_realtime: true },
+      { trip_id: "T2", stop_id: "S1", arrival_time: "00:05:00", minutes_away: 35, is_realtime: false },
+    ]));
+    expect(ruleIds(rec, ctx())).not.toContain("AR-04");
+  });
+
+  it("flags duplicate (trip_id, stop_id, arrival_time)", () => {
     const rec = ok("get_arrivals", {}, arrivalsResp([
       { trip_id: "T1", stop_id: "S1", arrival_time: "08:00:00", is_realtime: true },
-      { trip_id: "T1", stop_id: "S1", arrival_time: "08:01:00", is_realtime: true },
+      { trip_id: "T1", stop_id: "S1", arrival_time: "08:00:00", is_realtime: true },
     ]));
     expect(ruleIds(rec, ctx())).toContain("AR-03");
+  });
+
+  it("allows loop trips that visit the same stop at different times", () => {
+    const rec = ok("get_arrivals", {}, arrivalsResp([
+      { trip_id: "T1", stop_id: "S1", arrival_time: "00:05:00", minutes_away: 5, is_realtime: false },
+      { trip_id: "T1", stop_id: "S1", arrival_time: "00:29:00", minutes_away: 29, is_realtime: false },
+    ]));
+    expect(ruleIds(rec, ctx())).not.toContain("AR-03");
   });
 
   it("records realtime trip_ids for X-ARR-TRIP cross-check", () => {

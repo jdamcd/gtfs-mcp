@@ -226,35 +226,56 @@ function checkGetArrivals(record: CallRecord, ctx: RunContext): Violation[] {
     });
   }
 
+  // Compare by minutes_away when available — arrival_time is a wall-clock
+  // HH:MM:SS that wraps at midnight, so a response spanning a service-day
+  // rollover will appear out of order by string comparison but is correctly
+  // sorted by absolute time.
   for (let i = 1; i < arrivals.length; i++) {
-    const prev = arrivals[i - 1].arrival_time;
-    const curr = arrivals[i].arrival_time;
+    const prev = arrivals[i - 1];
+    const curr = arrivals[i];
+    const prevT = typeof prev.minutes_away === "number" ? prev.minutes_away : null;
+    const currT = typeof curr.minutes_away === "number" ? curr.minutes_away : null;
+    if (prevT !== null && currT !== null) {
+      if (currT < prevT) {
+        violations.push({
+          rule: "AR-04",
+          severity: "warn",
+          message: "get_arrivals not sorted ascending by minutes_away",
+          context: { index: i, prev: prev.arrival_time, curr: curr.arrival_time },
+        });
+        break;
+      }
+      continue;
+    }
+    // Fallback to string compare only when minutes_away isn't present on both.
     if (
-      typeof prev === "string" &&
-      typeof curr === "string" &&
-      GTFS_TIME_PATTERN.test(prev) &&
-      GTFS_TIME_PATTERN.test(curr) &&
-      curr < prev
+      typeof prev.arrival_time === "string" &&
+      typeof curr.arrival_time === "string" &&
+      GTFS_TIME_PATTERN.test(prev.arrival_time) &&
+      GTFS_TIME_PATTERN.test(curr.arrival_time) &&
+      curr.arrival_time < prev.arrival_time
     ) {
       violations.push({
         rule: "AR-04",
         severity: "warn",
         message: "get_arrivals not sorted ascending by arrival_time",
-        context: { index: i, prev, curr },
+        context: { index: i, prev: prev.arrival_time, curr: curr.arrival_time },
       });
       break;
     }
   }
 
+  // Loop routes legitimately visit the same stop twice on the same trip at
+  // different times. Only flag as duplication when arrival_time also matches.
   const seen = new Set<string>();
   for (const a of arrivals) {
-    const key = `${a.trip_id}|${a.stop_id}`;
+    const key = `${a.trip_id}|${a.stop_id}|${a.arrival_time}`;
     if (seen.has(key)) {
       violations.push({
         rule: "AR-03",
         severity: "error",
-        message: "get_arrivals contains duplicate (trip_id, stop_id)",
-        context: { trip_id: a.trip_id, stop_id: a.stop_id },
+        message: "get_arrivals contains duplicate (trip_id, stop_id, arrival_time)",
+        context: { trip_id: a.trip_id, stop_id: a.stop_id, arrival_time: a.arrival_time },
       });
       break;
     }

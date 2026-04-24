@@ -70,6 +70,13 @@ export function registerArrivalTools(ctx: ToolContext): void {
       // within its horizon. Cancelled trips also contribute to the window so
       // a cancelled slot doesn't silently backfill from schedule.
       const rtWindowByKey = new Map<string, number>();
+      // Trip ids observed in RT per stop. Stable-id agencies match RT to
+      // static trip_ids, so a single trip can appear in both sources — and
+      // RT may predict *earlier* than schedule (not caught by the time
+      // window) or report a different route_id than static (MARTA does
+      // this; public-facing id in RT vs internal id in schedule). Keying
+      // by stop alone dedupes across both anomalies.
+      const rtTripsByStop = new Map<string, Set<string>>();
       const windowKey = (stopId: string, routeId: string | null) =>
         `${stopId}\x00${routeId ?? ""}`;
 
@@ -99,6 +106,12 @@ export function registerArrivalTools(ctx: ToolContext): void {
           if (existing === undefined || absMs > existing) {
             rtWindowByKey.set(k, absMs);
           }
+          let trips = rtTripsByStop.get(stu.stopId);
+          if (!trips) {
+            trips = new Set();
+            rtTripsByStop.set(stu.stopId, trips);
+          }
+          trips.add(tripId);
 
           if (isCanceled) continue;
           if (stu.scheduleRelationship === STOP_SKIPPED) continue;
@@ -153,6 +166,7 @@ export function registerArrivalTools(ctx: ToolContext): void {
           const absMs = midnight + gtfsTimeToSeconds(row.arrival_time) * 1000;
           const rtMax = rtWindowByKey.get(windowKey(row.stop_id, row.route_id));
           if (rtMax !== undefined && absMs <= rtMax) continue;
+          if (rtTripsByStop.get(row.stop_id)?.has(row.trip_id)) continue;
           scheduled.push({
             absMs,
             arrival: {

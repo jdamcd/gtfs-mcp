@@ -684,6 +684,49 @@ describe("get_arrivals 24h+ service day handling", () => {
       clearFeedCache();
     }
   });
+
+  it("suppresses scheduled rows whose trip_id already appeared in realtime, even when RT predicts earlier than schedule", async () => {
+    // Stable-id agencies (MBTA, BART) use matching trip_ids between static
+    // and realtime. If RT predicts an early arrival, the time-window filter
+    // alone won't suppress the scheduled row — trip_id match must also.
+    //
+    // Scheduled T1 at S1N is at 08:00:00. Pin clock to 07:30 local so it's
+    // upcoming. Send RT saying T1 arrives at S1N a bit earlier, at 07:45.
+    const fakeNow = new Date("2026-04-20T07:30:00-04:00");
+    const earlyArrivalSecs = Math.floor(fakeNow.getTime() / 1000) + 15 * 60;
+
+    const feed = encodeTripUpdateFeed([
+      {
+        tripId: "T1",
+        routeId: "R1",
+        stopTimeUpdates: [{ stopId: "S1N", arrivalTime: earlyArrivalSecs }],
+      },
+    ]);
+
+    const { clearFeedCache } = await import("../src/gtfs/realtime.js");
+    clearFeedCache();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      if (String(url).includes("trip-updates")) {
+        return new Response(feed, { status: 200 });
+      }
+      return new Response(encodeTripUpdateFeed([]), { status: 200 });
+    });
+    vi.useFakeTimers({ now: fakeNow });
+
+    try {
+      const result = await client.callTool({
+        name: "get_arrivals",
+        arguments: { system: "test", stop_id: "S1N" },
+      });
+      const arrivals = getJsonContent(result).arrivals;
+      const t1s = arrivals.filter((a: any) => a.trip_id === "T1");
+      expect(t1s.length).toBe(1);
+      expect(t1s[0].is_realtime).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      clearFeedCache();
+    }
+  });
 });
 
 describe("get_alerts active_period filtering", () => {
