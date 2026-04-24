@@ -31,7 +31,7 @@ export function createServer(config: AppConfig): McpServer {
   // Register list_systems tool
   server.tool(
     "list_systems",
-    "List all configured transit systems",
+    "List configured transit systems and their IDs. Call this first when the user hasn't specified a system, or to discover valid `system` values for other tools.",
     {},
     async () =>
       jsonResponse(config.systems.map((s) => ({ id: s.id, name: s.name })))

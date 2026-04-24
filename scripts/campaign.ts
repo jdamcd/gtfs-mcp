@@ -185,7 +185,7 @@ async function phase1(client: Client, system: SystemConfig, tracker: Tracker): P
   const run = phaseRunner(client, system, "phase1", tracker);
   const all = await run("list_routes_all", "list_routes", { system: system.id });
 
-  const routes = (all.result as any[] | undefined) ?? [];
+  const routes = ((all.result as any)?.routes as any[] | undefined) ?? [];
   const routeTypes = Array.from(new Set(routes.map((r) => r.type).filter((t) => t != null)));
 
   for (const routeType of routeTypes) {
@@ -207,7 +207,7 @@ async function phase1(client: Client, system: SystemConfig, tracker: Tracker): P
 async function phase2(client: Client, system: SystemConfig, tracker: Tracker): Promise<void> {
   const run = phaseRunner(client, system, "phase2", tracker);
   const listResult = await run("list_routes", "list_routes", { system: system.id });
-  const routes = (listResult.result as any[] | undefined) ?? [];
+  const routes = ((listResult.result as any)?.routes as any[] | undefined) ?? [];
 
   // Pick up to 3 routes spanning distinct route_types.
   const seenTypes = new Set<number>();
@@ -245,7 +245,7 @@ async function phase2(client: Client, system: SystemConfig, tracker: Tracker): P
 async function phase3(client: Client, system: SystemConfig, tracker: Tracker): Promise<void> {
   const run = phaseRunner(client, system, "phase3", tracker);
   const listResult = await run("list_routes", "list_routes", { system: system.id });
-  const routes = (listResult.result as any[] | undefined) ?? [];
+  const routes = ((listResult.result as any)?.routes as any[] | undefined) ?? [];
   const firstRoute = routes[0];
   if (!firstRoute) {
     writeCall(system.id, "phase3", "skipped_no_routes", {
@@ -342,7 +342,7 @@ async function phase5(client: Client, system: SystemConfig, tracker: Tracker): P
 async function phase6(client: Client, system: SystemConfig, tracker: Tracker): Promise<void> {
   const run = phaseRunner(client, system, "phase6", tracker);
   const listResult = await run("list_routes", "list_routes", { system: system.id });
-  const routes = (listResult.result as any[] | undefined) ?? [];
+  const routes = ((listResult.result as any)?.routes as any[] | undefined) ?? [];
   const firstRoute = routes[0];
   if (!firstRoute) return;
 
@@ -360,7 +360,7 @@ async function phase6(client: Client, system: SystemConfig, tracker: Tracker): P
     { system: system.id, stop_id: firstStop, limit: 5 },
   );
 
-  const tripId = (arrivals.result as any[] | undefined)?.[0]?.trip_id;
+  const tripId = ((arrivals.result as any)?.arrivals as any[] | undefined)?.[0]?.trip_id;
   if (!tripId) {
     writeCall(system.id, "phase6", "skipped_no_trip_id", {
       tool: "n/a", args: {}, ok: false, ms: 0, error: "no arrivals returned a trip_id",
@@ -401,7 +401,7 @@ async function runChainFlow(
     stop_id: firstStop,
     limit: 5,
   });
-  const firstArrival = (arrivals.result as any[] | undefined)?.[0];
+  const firstArrival = ((arrivals.result as any)?.arrivals as any[] | undefined)?.[0];
   const arrTripId: string | undefined = firstArrival?.trip_id;
   const arrRouteId: string | undefined = firstArrival?.route_id;
 

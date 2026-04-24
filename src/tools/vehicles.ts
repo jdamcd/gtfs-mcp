@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  congestionLevelName,
+  occupancyStatusName,
+  vehicleStopStatusName,
+} from "../gtfs/enumNames.js";
 import { fetchAllFeeds } from "../gtfs/realtime.js";
 import { formatLocalTime } from "../time.js";
 import type { VehiclePosition } from "../types.js";
@@ -12,14 +17,14 @@ import {
 export function registerVehicleTools(ctx: ToolContext): void {
   ctx.server.tool(
     "get_vehicles",
-    "Get current vehicle positions for a transit system",
+    "Get current vehicle positions (lat/lon, bearing, speed, current_status like 'in_transit_to' / 'stopped_at'). Filter by route_id to avoid large responses on busy systems.",
     {
       system: z.string().describe("System ID"),
       route_id: z.string().optional().describe("Filter by route ID"),
     },
     async ({ system, route_id }) => {
       const config = resolveSystem(ctx.systems, system);
-      if (!config) return unknownSystemResponse(system);
+      if (!config) return unknownSystemResponse(system, ctx.systems);
 
       const entities = await fetchAllFeeds(
         config.realtime.vehicle_positions,
@@ -48,8 +53,9 @@ export function registerVehicleTools(ctx: ToolContext): void {
             ? formatLocalTime(new Date(Number(v.timestamp) * 1000), config.timezone)
             : null,
           stop_id: v.stopId ?? null,
-          current_status:
-            v.currentStatus != null ? String(v.currentStatus) : null,
+          current_status: vehicleStopStatusName(v.currentStatus),
+          occupancy_status: occupancyStatusName(v.occupancyStatus),
+          congestion_level: congestionLevelName(v.congestionLevel),
         };
       });
 

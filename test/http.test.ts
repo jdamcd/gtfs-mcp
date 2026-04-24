@@ -129,8 +129,9 @@ describe("HTTP transport", () => {
       name: "list_routes",
       arguments: { system: "test" },
     });
-    const routes = getJsonContent(result as any) as any[];
-    expect(routes.length).toBe(2);
+    const data = getJsonContent(result as any) as any;
+    expect(data.routes.length).toBe(2);
+    expect(data.total).toBe(2);
   });
 
   it("gets realtime arrivals", async () => {
@@ -138,10 +139,10 @@ describe("HTTP transport", () => {
       name: "get_arrivals",
       arguments: { system: "test", stop_id: "S2" },
     });
-    const arrivals = getJsonContent(result as any) as any[];
-    expect(arrivals.length).toBeGreaterThanOrEqual(1);
-    expect(arrivals[0]).toHaveProperty("trip_id");
-    expect(arrivals[0].is_realtime).toBe(true);
+    const response = getJsonContent(result as any) as any;
+    expect(response.arrivals.length).toBeGreaterThanOrEqual(1);
+    expect(response.arrivals[0]).toHaveProperty("trip_id");
+    expect(response.arrivals[0].is_realtime).toBe(true);
   });
 
   it("gets alerts", async () => {

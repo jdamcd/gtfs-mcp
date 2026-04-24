@@ -34,26 +34,32 @@ describe("SYS-01 list_systems", () => {
 describe("RT-01 list_routes duplicates", () => {
   it("passes on unique route_ids and records observed routes", () => {
     const c = ctx();
-    const rec = ok("list_routes", {}, [
-      { route_id: "R1" },
-      { route_id: "R2" },
-    ]);
+    const rec = ok("list_routes", {}, {
+      total: 2,
+      routes: [{ route_id: "R1" }, { route_id: "R2" }],
+    });
     expect(ruleIds(rec, c)).toEqual([]);
     expect(c.observedRouteIds.has("R1")).toBe(true);
     expect(c.listRoutesCount).toBe(2);
   });
 
   it("flags duplicates", () => {
-    const rec = ok("list_routes", {}, [
-      { route_id: "R1" },
-      { route_id: "R1" },
-    ]);
+    const rec = ok("list_routes", {}, {
+      total: 2,
+      routes: [{ route_id: "R1" }, { route_id: "R1" }],
+    });
     expect(ruleIds(rec, ctx())).toEqual(["RT-01"]);
   });
 
   it("does not set listRoutesCount when filtered by route_type", () => {
     const c = ctx();
-    runInvariants(ok("list_routes", { route_type: 1 }, [{ route_id: "R1" }]), c);
+    runInvariants(
+      ok("list_routes", { route_type: 1 }, {
+        total: 1,
+        routes: [{ route_id: "R1" }],
+      }),
+      c,
+    );
     expect(c.listRoutesCount).toBeNull();
   });
 });
@@ -125,36 +131,38 @@ describe("ST-01 / ST-03 search_stops + get_stop", () => {
 });
 
 describe("AR-01 / AR-03 / AR-04 get_arrivals", () => {
+  const arrivalsResp = (arrivals: unknown[]) => ({ data_source: "realtime", arrivals });
+
   it("flags non-HH:MM:SS arrival_time", () => {
-    const rec = ok("get_arrivals", {}, [
+    const rec = ok("get_arrivals", {}, arrivalsResp([
       { trip_id: "T1", stop_id: "S1", arrival_time: "08:00", is_realtime: true },
-    ]);
+    ]));
     expect(ruleIds(rec, ctx())).toContain("AR-01");
   });
 
   it("flags unsorted arrivals", () => {
-    const rec = ok("get_arrivals", {}, [
+    const rec = ok("get_arrivals", {}, arrivalsResp([
       { trip_id: "T1", stop_id: "S1", arrival_time: "08:10:00", is_realtime: true },
       { trip_id: "T2", stop_id: "S1", arrival_time: "08:05:00", is_realtime: true },
-    ]);
+    ]));
     expect(ruleIds(rec, ctx())).toContain("AR-04");
   });
 
   it("flags duplicate (trip_id, stop_id)", () => {
-    const rec = ok("get_arrivals", {}, [
+    const rec = ok("get_arrivals", {}, arrivalsResp([
       { trip_id: "T1", stop_id: "S1", arrival_time: "08:00:00", is_realtime: true },
       { trip_id: "T1", stop_id: "S1", arrival_time: "08:01:00", is_realtime: true },
-    ]);
+    ]));
     expect(ruleIds(rec, ctx())).toContain("AR-03");
   });
 
   it("records realtime trip_ids for X-ARR-TRIP cross-check", () => {
     const c = ctx();
     runInvariants(
-      ok("get_arrivals", {}, [
+      ok("get_arrivals", {}, arrivalsResp([
         { trip_id: "RT-1", stop_id: "S1", arrival_time: "08:00:00", is_realtime: true },
         { trip_id: "SCH-1", stop_id: "S1", arrival_time: "08:05:00", is_realtime: false },
-      ]),
+      ])),
       c
     );
     expect(c.arrivalsTripIds.has("RT-1")).toBe(true);

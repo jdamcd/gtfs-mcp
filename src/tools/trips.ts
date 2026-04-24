@@ -1,28 +1,36 @@
 import type { transit_realtime as TransitRealtime } from "gtfs-realtime-bindings";
 import { z } from "zod";
-import { getStopName, getTripDetails } from "../gtfs/queries.js";
+import {
+  getTripDetails,
+  makeStopNameResolver,
+  type GtfsDb,
+} from "../gtfs/queries.js";
 import { fetchAllFeeds } from "../gtfs/realtime.js";
+import {
+  stopStatusFromRelationship,
+  tripStatusFromRelationship,
+} from "../gtfs/rtHelpers.js";
 import { extractRtTime, formatLocalTime } from "../time.js";
 import {
   type ToolContext,
   resolveSystem,
   unknownSystemResponse,
   jsonResponse,
-  textResponse,
+  errorResponse,
   getReadyDb,
 } from "./helpers.js";
 
 export function registerTripTools(ctx: ToolContext): void {
   ctx.server.tool(
     "get_trip",
-    "Get details about a specific trip including stop sequence and realtime updates",
+    "Get a trip's stop sequence with realtime delay/status per stop. Returns top-level `trip.status` (scheduled/canceled/added) and per-stop `status` (scheduled/skipped/no_data). For agencies like MTA whose realtime trip_ids are synthetic, returns a realtime-only synthesis when the trip_id isn't in the static schedule. Use trip_ids returned by get_arrivals; they are short-lived.",
     {
       system: z.string().describe("System ID"),
-      trip_id: z.string().describe("Trip ID"),
+      trip_id: z.string().describe("Trip ID, from get_arrivals"),
     },
     async ({ system, trip_id }) => {
       const config = resolveSystem(ctx.systems, system);
-      if (!config) return unknownSystemResponse(system);
+      if (!config) return unknownSystemResponse(system, ctx.systems);
 
       const db = await getReadyDb(config, ctx.dataDir, ctx.refreshHours);
       const details = getTripDetails(db, trip_id);
@@ -40,14 +48,20 @@ export function registerTripTools(ctx: ToolContext): void {
         // (e.g. MTA's `069300_A..S58R` synthetic trip_ids that don't exist in
         // the static schedule).
         if (!tripUpdate) {
-          return textResponse(`Trip not found: ${trip_id}`);
+          return errorResponse(
+            `Trip not found: ${trip_id}. trip_ids come from get_arrivals and are only meaningful shortly after they are returned — realtime trips are short-lived.`
+          );
         }
         return jsonResponse(synthesiseTripFromRt(db, config.timezone, trip_id, tripUpdate));
       }
 
       const realtimeByStop = new Map<
         string,
-        { arrivalDelay: number | null; departureDelay: number | null }
+        {
+          arrivalDelay: number | null;
+          departureDelay: number | null;
+          scheduleRelationship: number | null | undefined;
+        }
       >();
       if (tripUpdate?.stopTimeUpdate) {
         for (const stu of tripUpdate.stopTimeUpdate) {
@@ -55,6 +69,7 @@ export function registerTripTools(ctx: ToolContext): void {
             realtimeByStop.set(stu.stopId, {
               arrivalDelay: stu.arrival?.delay ?? null,
               departureDelay: stu.departure?.delay ?? null,
+              scheduleRelationship: stu.scheduleRelationship,
             });
           }
         }
@@ -71,6 +86,9 @@ export function registerTripTools(ctx: ToolContext): void {
           arrival_delay_seconds: rt?.arrivalDelay ?? null,
           departure_delay_seconds: rt?.departureDelay ?? null,
           is_realtime: !!rt,
+          status: rt
+            ? stopStatusFromRelationship(rt.scheduleRelationship)
+            : "scheduled",
         };
       });
 
@@ -81,6 +99,9 @@ export function registerTripTools(ctx: ToolContext): void {
           service_id: details.trip.service_id,
           trip_headsign: details.trip.trip_headsign,
           direction_id: details.trip.direction_id,
+          status: tripStatusFromRelationship(
+            tripUpdate?.trip?.scheduleRelationship
+          ),
         },
         stop_times: stopTimes,
       });
@@ -89,21 +110,14 @@ export function registerTripTools(ctx: ToolContext): void {
 }
 
 function synthesiseTripFromRt(
-  db: any,
+  db: GtfsDb,
   timezone: string,
   tripId: string,
   tripUpdate: TransitRealtime.ITripUpdate
 ) {
   const stopTimeUpdates = tripUpdate.stopTimeUpdate ?? [];
   const lastStopId = stopTimeUpdates.at(-1)?.stopId ?? null;
-
-  const nameCache = new Map<string, string | null>();
-  const resolveName = (stopId: string): string | null => {
-    if (!nameCache.has(stopId)) {
-      nameCache.set(stopId, getStopName(db, stopId));
-    }
-    return nameCache.get(stopId)!;
-  };
+  const resolveName = makeStopNameResolver(db);
 
   const stopTimes = stopTimeUpdates.map((stu, idx) => {
     const arrivalMs = extractRtTime(stu.arrival?.time);
@@ -117,6 +131,7 @@ function synthesiseTripFromRt(
       arrival_delay_seconds: stu.arrival?.delay ?? null,
       departure_delay_seconds: stu.departure?.delay ?? null,
       is_realtime: true,
+      status: stopStatusFromRelationship(stu.scheduleRelationship),
     };
   });
 
@@ -127,6 +142,7 @@ function synthesiseTripFromRt(
       service_id: null,
       trip_headsign: lastStopId ? resolveName(lastStopId) : null,
       direction_id: tripUpdate.trip?.directionId ?? null,
+      status: tripStatusFromRelationship(tripUpdate.trip?.scheduleRelationship),
     },
     stop_times: stopTimes,
   };

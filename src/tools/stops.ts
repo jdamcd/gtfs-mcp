@@ -5,22 +5,22 @@ import {
   resolveSystem,
   unknownSystemResponse,
   jsonResponse,
-  textResponse,
+  errorResponse,
   getReadyDb,
 } from "./helpers.js";
 
 export function registerStopTools(ctx: ToolContext): void {
   ctx.server.tool(
     "search_stops",
-    "Search for transit stops by name",
+    "Find stops by name (case-insensitive substring on stop_name). Returns parent stations and standalone stops, not child platforms. Use this when the user names a stop; use find_nearby_stops when they give coordinates or 'near me'.",
     {
-      system: z.string().describe("System ID (e.g. 'mta-subway', 'bart')"),
-      query: z.string().describe("Search query for stop name"),
+      system: z.string().describe("System ID"),
+      query: z.string().describe("Case-insensitive substring of stop_name"),
       limit: z.number().default(10).describe("Maximum number of results"),
     },
     async ({ system, query, limit }) => {
       const config = resolveSystem(ctx.systems, system);
-      if (!config) return unknownSystemResponse(system);
+      if (!config) return unknownSystemResponse(system, ctx.systems);
 
       const db = await getReadyDb(config, ctx.dataDir, ctx.refreshHours);
       const stops = searchStops(db, query, limit);
@@ -38,7 +38,7 @@ export function registerStopTools(ctx: ToolContext): void {
 
   ctx.server.tool(
     "find_nearby_stops",
-    "Find transit stops near a latitude/longitude, ordered by distance. Returns parent stations and standalone stops (not child platforms).",
+    "Find stops near a latitude/longitude, ordered by distance. Returns parent stations and standalone stops (not child platforms). Requires coordinates — if the user gave a place name, search_stops with that name first to get coordinates.",
     {
       system: z.string().describe("System ID"),
       lat: z.number().describe("Latitude in decimal degrees"),
@@ -48,7 +48,7 @@ export function registerStopTools(ctx: ToolContext): void {
     },
     async ({ system, lat, lon, radius_m, limit }) => {
       const config = resolveSystem(ctx.systems, system);
-      if (!config) return unknownSystemResponse(system);
+      if (!config) return unknownSystemResponse(system, ctx.systems);
 
       const db = await getReadyDb(config, ctx.dataDir, ctx.refreshHours);
       const stops = findStopsNearby(db, lat, lon, radius_m, limit);
@@ -67,20 +67,22 @@ export function registerStopTools(ctx: ToolContext): void {
 
   ctx.server.tool(
     "get_stop",
-    "Get details about a specific stop and the routes serving it",
+    "Get a stop's details and the routes serving it. Accepts any stop_id (parent station, standalone, or child platform). Use search_stops or find_nearby_stops first if only a name is known.",
     {
       system: z.string().describe("System ID"),
-      stop_id: z.string().describe("Stop ID"),
+      stop_id: z.string().describe("Stop ID from search_stops / find_nearby_stops / get_route"),
     },
     async ({ system, stop_id }) => {
       const config = resolveSystem(ctx.systems, system);
-      if (!config) return unknownSystemResponse(system);
+      if (!config) return unknownSystemResponse(system, ctx.systems);
 
       const db = await getReadyDb(config, ctx.dataDir, ctx.refreshHours);
       const details = getStopDetails(db, stop_id);
 
       if (!details.stop) {
-        return textResponse(`Stop not found: ${stop_id}`);
+        return errorResponse(
+          `Stop not found: ${stop_id}. Use search_stops by name or find_nearby_stops by coordinates to discover valid stop_ids.`
+        );
       }
 
       return jsonResponse({

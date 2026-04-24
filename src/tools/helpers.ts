@@ -11,14 +11,19 @@ export interface ToolContext {
 
 export function jsonResponse(data: unknown) {
   return {
-    content: [
-      { type: "text" as const, text: JSON.stringify(data, null, 2) },
-    ],
+    content: [{ type: "text" as const, text: JSON.stringify(data) }],
   };
 }
 
 export function textResponse(message: string) {
   return {
+    content: [{ type: "text" as const, text: message }],
+  };
+}
+
+export function errorResponse(message: string) {
+  return {
+    isError: true,
     content: [{ type: "text" as const, text: message }],
   };
 }
@@ -30,10 +35,12 @@ export function resolveSystem(
   return systems.get(id) ?? null;
 }
 
-export function unknownSystemResponse(id: string) {
-  return textResponse(
-    `Unknown system: ${id}. Use list_systems to see available systems.`
-  );
+export function unknownSystemResponse(
+  id: string,
+  systems: Map<string, SystemConfig>
+) {
+  const available = Array.from(systems.keys()).sort().join(", ") || "none";
+  return errorResponse(`Unknown system: ${id}. Available: ${available}.`);
 }
 
 export async function getReadyDb(

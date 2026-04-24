@@ -29,7 +29,15 @@ const TimezoneSchema = z.string().refine(
 );
 
 export const SystemConfigSchema = z.object({
-  id: z.string(),
+  // Restrict to filesystem-safe tokens: the id is joined into disk paths
+  // (data_dir/<id>/gtfs.db), so permitting "/" or ".." would allow a
+  // malicious config to escape the data directory.
+  id: z
+    .string()
+    .regex(
+      /^[a-z0-9_-]+$/i,
+      "system id must be alphanumeric with underscores or hyphens"
+    ),
   name: z.string(),
   schedule_url: z.string(),
   timezone: TimezoneSchema,

@@ -1,5 +1,12 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { currentGtfsTime, formatLocalTime, formatLocalDateTime } from "../src/time.js";
+import {
+  currentGtfsTime,
+  formatLocalTime,
+  formatLocalDateTime,
+  localMidnightMs,
+  previousGtfsDate,
+  shiftGtfsTimeByDays,
+} from "../src/time.js";
 
 describe("formatLocalTime", () => {
   it("formats HH:MM:SS in the given timezone", () => {
@@ -46,5 +53,45 @@ describe("currentGtfsTime", () => {
     expect(currentGtfsTime("America/New_York")).toBe("08:00:00");
     expect(currentGtfsTime("Europe/London")).toBe("13:00:00");
     expect(currentGtfsTime("Asia/Tokyo")).toBe("21:00:00");
+  });
+});
+
+describe("localMidnightMs", () => {
+  // Round-trips: formatting the returned unix ms back to HH:MM:SS in the tz
+  // must yield "00:00:00". This is the invariant that matters at call sites.
+  const cases: Array<[number, string, string]> = [
+    [20260715, "UTC", "regular UTC day"],
+    [20260715, "America/New_York", "regular NY day"],
+    [20260308, "America/New_York", "spring-forward NY"],
+    [20261101, "America/New_York", "fall-back NY"],
+    [20260329, "Europe/London", "spring-forward UK"],
+    [20260125, "Asia/Kolkata", "Kolkata (+5:30) winter"],
+    [20260405, "Pacific/Auckland", "fall-back NZ"],
+    [20260927, "Pacific/Auckland", "spring-forward NZ"],
+  ];
+  for (const [date, tz, label] of cases) {
+    it(`returns midnight local for ${label}`, () => {
+      const ms = localMidnightMs(date, tz);
+      expect(formatLocalTime(new Date(ms), tz)).toBe("00:00:00");
+    });
+  }
+});
+
+describe("previousGtfsDate", () => {
+  it("rolls back across month boundaries", () => {
+    expect(previousGtfsDate(20260301)).toBe(20260228);
+    expect(previousGtfsDate(20260101)).toBe(20251231);
+    expect(previousGtfsDate(20260501)).toBe(20260430);
+  });
+  it("handles leap year February", () => {
+    expect(previousGtfsDate(20240301)).toBe(20240229);
+  });
+});
+
+describe("shiftGtfsTimeByDays", () => {
+  it("adds 24h to produce 24h+ times usable in yesterday-service queries", () => {
+    expect(shiftGtfsTimeByDays("01:30:00", 1)).toBe("25:30:00");
+    expect(shiftGtfsTimeByDays("00:00:00", 1)).toBe("24:00:00");
+    expect(shiftGtfsTimeByDays("10:15:30", 1)).toBe("34:15:30");
   });
 });

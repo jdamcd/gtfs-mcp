@@ -76,6 +76,7 @@ export function encodeTripUpdateFeed(
       arrivalDelay?: number;
       departureTime?: number;
       departureDelay?: number;
+      scheduleRelationship?: number;
     }>;
   }>
 ): Uint8Array {
@@ -102,6 +103,7 @@ export function encodeTripUpdateFeed(
             time: stu.departureTime ? stu.departureTime : undefined,
             delay: stu.departureDelay,
           },
+          scheduleRelationship: stu.scheduleRelationship ?? 0,
         })),
       },
     })),
@@ -115,6 +117,7 @@ export function encodeAlertFeed(
     headerText: string;
     descriptionText: string;
     informedEntities?: Array<{ routeId?: string; stopId?: string }>;
+    activePeriods?: Array<{ start?: number; end?: number }>;
   }>
 ): Uint8Array {
   const message = transit_realtime.FeedMessage.create({
@@ -135,6 +138,7 @@ export function encodeAlertFeed(
           routeId: ie.routeId,
           stopId: ie.stopId,
         })),
+        activePeriod: a.activePeriods,
       },
     })),
   });

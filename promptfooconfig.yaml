@@ -73,8 +73,11 @@ tests:
     vars:
       query: "What stops does the 1 train make going northbound?"
     assert:
+      # Accept either the direct get_route call or a list_routes discovery step
+      # first — the tool description encourages looking up route_ids by name
+      # when unknown, which is the more robust flow in multi-turn use.
       - type: javascript
-        value: "output.includes('\"name\":\"get_route\"') && output.includes('\"route_id\"')"
+        value: "output.includes('\"name\":\"get_route\"') || output.includes('\"name\":\"list_routes\"')"
 
   - description: "Arrivals: upcoming trains at a stop"
     vars:
@@ -94,8 +97,10 @@ tests:
     vars:
       query: "Where are all the 1 train cars right now?"
     assert:
+      # Same reasoning as the get_route case: accept a list_routes discovery
+      # step in place of the direct call.
       - type: javascript
-        value: "output.includes('\"name\":\"get_vehicles\"') && output.includes('\"route_id\"')"
+        value: "output.includes('\"name\":\"get_vehicles\"') || output.includes('\"name\":\"list_routes\"')"
 
   - description: "Trips: look up specific trip"
     vars:

@@ -65,12 +65,14 @@ describe("realtime fetch failures", () => {
       name: "get_arrivals",
       arguments: { system: "test", stop_id: "S1S" },
     });
-    const arrivals = getJsonContent(result) as any[];
+    const response = getJsonContent(result) as any;
+    const arrivals = response.arrivals;
 
     expect(arrivals.length).toBeGreaterThan(0);
     for (const a of arrivals) {
       expect(a.is_realtime).toBe(false);
     }
+    expect(response.data_source).toBe("scheduled");
   });
 
   it("get_alerts returns [] when alerts feed fails", async () => {
@@ -101,10 +103,13 @@ describe("realtime fetch failures", () => {
 
     expect(data.route_count).toBeGreaterThan(0);
     expect(data.active_alerts).toBe(0);
-    // All three feed types are configured with URLs, so all three should report the fetch outcome.
-    // After the 500s, entities is empty — feeds report "0 entities".
-    for (const feed of Object.values(data.feeds) as string[]) {
-      expect(feed).toMatch(/0 entities|error/);
+
+    for (const feed of Object.values(data.feeds) as any[]) {
+      expect(feed.configured).toBe(true);
+      expect(feed.urls_failed).toBeGreaterThan(0);
+      expect(feed.urls_ok).toBe(0);
+      expect(feed.entities).toBe(0);
+      expect(feed.errors.length).toBeGreaterThan(0);
     }
   });
 });
@@ -124,7 +129,8 @@ describe("malformed protobuf in realtime feeds", () => {
       name: "get_arrivals",
       arguments: { system: "test", stop_id: "S1S" },
     });
-    const arrivals = getJsonContent(result) as any[];
+    const response = getJsonContent(result) as any;
+    const arrivals = response.arrivals;
 
     expect(arrivals.length).toBeGreaterThan(0);
     for (const a of arrivals) {
@@ -171,7 +177,8 @@ describe("empty realtime config", () => {
       name: "get_arrivals",
       arguments: { system: "test", stop_id: "S1S" },
     });
-    const arrivals = getJsonContent(result) as any[];
+    const response = getJsonContent(result) as any;
+    const arrivals = response.arrivals;
 
     expect(arrivals.length).toBeGreaterThan(0);
     for (const a of arrivals) {
@@ -197,7 +204,7 @@ describe("empty realtime config", () => {
     expect(getJsonContent(result)).toEqual([]);
   });
 
-  it("get_system_status reports feeds as 'not configured'", async () => {
+  it("get_system_status reports feeds as not configured when no URLs are set", async () => {
     const client = await makeClient(emptyRealtimeConfig);
     const result = await client.callTool({
       name: "get_system_status",
@@ -205,8 +212,9 @@ describe("empty realtime config", () => {
     });
     const data = getJsonContent(result) as any;
 
-    expect(data.feeds.trip_updates).toBe("not configured");
-    expect(data.feeds.vehicle_positions).toBe("not configured");
-    expect(data.feeds.alerts).toBe("not configured");
+    for (const feed of Object.values(data.feeds) as any[]) {
+      expect(feed.configured).toBe(false);
+      expect(feed.urls).toBe(0);
+    }
   });
 });

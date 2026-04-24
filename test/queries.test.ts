@@ -104,8 +104,10 @@ describe("resolveStopIds", () => {
 });
 
 describe("getScheduledArrivals", () => {
+  const ALL_SERVICES = ["WEEKDAY", "WEEKEND"];
+
   it("returns arrivals for a stop", () => {
-    const arrivals = getScheduledArrivals(db, ["S2"]);
+    const arrivals = getScheduledArrivals(db, ["S2"], ALL_SERVICES);
     expect(arrivals.length).toBeGreaterThanOrEqual(1);
     expect(arrivals[0]).toHaveProperty("trip_id");
     expect(arrivals[0]).toHaveProperty("arrival_time");
@@ -113,26 +115,26 @@ describe("getScheduledArrivals", () => {
   });
 
   it("returns arrivals for multiple stop IDs", () => {
-    const arrivals = getScheduledArrivals(db, ["S1N", "S1S"]);
+    const arrivals = getScheduledArrivals(db, ["S1N", "S1S"], ALL_SERVICES);
     expect(arrivals.length).toBeGreaterThanOrEqual(2);
     const stopIds = new Set(arrivals.map((a) => a.stop_id));
     expect(stopIds.has("S1N") || stopIds.has("S1S")).toBe(true);
   });
 
   it("filters by route_id", () => {
-    const arrivals = getScheduledArrivals(db, ["S2"], "R1");
+    const arrivals = getScheduledArrivals(db, ["S2"], ALL_SERVICES, "R1");
     for (const a of arrivals) {
       expect(a.route_id).toBe("R1");
     }
   });
 
   it("respects limit", () => {
-    const arrivals = getScheduledArrivals(db, ["S2"], undefined, 1);
+    const arrivals = getScheduledArrivals(db, ["S2"], ALL_SERVICES, undefined, 1);
     expect(arrivals.length).toBeLessThanOrEqual(1);
   });
 
   it("returns arrivals sorted by time", () => {
-    const arrivals = getScheduledArrivals(db, ["S2"], undefined, 10);
+    const arrivals = getScheduledArrivals(db, ["S2"], ALL_SERVICES, undefined, 10);
     for (let i = 1; i < arrivals.length; i++) {
       expect(arrivals[i].arrival_time >= arrivals[i - 1].arrival_time).toBe(
         true
@@ -141,29 +143,53 @@ describe("getScheduledArrivals", () => {
   });
 
   it("includes trip_headsign", () => {
-    const arrivals = getScheduledArrivals(db, ["S3"]);
+    const arrivals = getScheduledArrivals(db, ["S3"], ALL_SERVICES);
     expect(arrivals[0]).toHaveProperty("trip_headsign");
+  });
+
+  it("returns empty when no service_ids are active", () => {
+    const arrivals = getScheduledArrivals(db, ["S2"], []);
+    expect(arrivals).toEqual([]);
+  });
+
+  it("filters out trips whose service_id is not active", () => {
+    const onlyWeekend = getScheduledArrivals(db, ["S2"], ["WEEKEND"]);
+    // All fixture trips are on WEEKDAY service, so this yields nothing.
+    expect(onlyWeekend).toEqual([]);
   });
 });
 
 describe("listRoutes", () => {
   it("returns all routes", () => {
-    const routes = listRoutes(db);
+    const { routes, total } = listRoutes(db);
     expect(routes.length).toBe(2);
+    expect(total).toBe(2);
   });
 
   it("filters by route_type", () => {
-    const subwayRoutes = listRoutes(db, 1);
-    expect(subwayRoutes.length).toBe(1);
-    expect(subwayRoutes[0].route_id).toBe("R1");
+    const subway = listRoutes(db, { routeType: 1 });
+    expect(subway.routes.length).toBe(1);
+    expect(subway.routes[0].route_id).toBe("R1");
 
-    const busRoutes = listRoutes(db, 3);
-    expect(busRoutes.length).toBe(1);
-    expect(busRoutes[0].route_id).toBe("R2");
+    const bus = listRoutes(db, { routeType: 3 });
+    expect(bus.routes.length).toBe(1);
+    expect(bus.routes[0].route_id).toBe("R2");
+  });
+
+  it("filters by query against name/id", () => {
+    const { routes } = listRoutes(db, { query: "Route One" });
+    expect(routes.length).toBe(1);
+    expect(routes[0].route_id).toBe("R1");
+  });
+
+  it("respects limit and returns correct total", () => {
+    const { routes, total } = listRoutes(db, { limit: 1 });
+    expect(routes.length).toBe(1);
+    expect(total).toBe(2);
   });
 
   it("returns expected fields", () => {
-    const routes = listRoutes(db);
+    const { routes } = listRoutes(db);
     const route = routes[0];
     expect(route).toHaveProperty("route_id");
     expect(route).toHaveProperty("route_short_name");

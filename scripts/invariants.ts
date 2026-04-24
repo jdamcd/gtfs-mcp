@@ -99,8 +99,9 @@ function checkListSystems(record: CallRecord, ctx: RunContext): Violation[] {
 }
 
 function checkListRoutes(record: CallRecord, ctx: RunContext): Violation[] {
-  if (!record.ok || !Array.isArray(record.result)) return [];
-  const routes = record.result as any[];
+  if (!record.ok || typeof record.result !== "object" || record.result == null) return [];
+  const routes = (record.result as any).routes;
+  if (!Array.isArray(routes)) return [];
   const violations: Violation[] = [];
 
   const ids = routes.map((r) => r?.route_id).filter((id): id is string => typeof id === "string");
@@ -208,8 +209,9 @@ function checkGetStop(record: CallRecord, ctx: RunContext): Violation[] {
 }
 
 function checkGetArrivals(record: CallRecord, ctx: RunContext): Violation[] {
-  if (!record.ok || !Array.isArray(record.result)) return [];
-  const arrivals = record.result as any[];
+  if (!record.ok || typeof record.result !== "object" || record.result == null) return [];
+  const arrivals = (record.result as any).arrivals;
+  if (!Array.isArray(arrivals)) return [];
   const violations: Violation[] = [];
 
   const badFormat = arrivals.find(

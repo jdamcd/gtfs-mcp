@@ -1,3 +1,15 @@
+import type { openDb } from "gtfs";
+
+export type GtfsDb = ReturnType<typeof openDb>;
+
+export interface TripRow {
+  trip_id: string;
+  route_id: string;
+  service_id: string;
+  trip_headsign: string | null;
+  direction_id: number | null;
+}
+
 export interface StopResult {
   stop_id: string;
   stop_name: string;
@@ -42,7 +54,7 @@ const MIN_COS_LAT = 0.01;
 type PositionedStop = StopResult & { stop_lat: number; stop_lon: number };
 
 export function findStopsNearby(
-  db: any,
+  db: GtfsDb,
   lat: number,
   lon: number,
   radiusMeters: number,
@@ -81,15 +93,28 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-export function getStopName(db: any, stopId: string): string | null {
+export function getStopName(db: GtfsDb, stopId: string): string | null {
   const row = db
     .prepare(`SELECT stop_name FROM stops WHERE stop_id = ?`)
     .get(stopId) as { stop_name: string | null } | undefined;
   return row?.stop_name ?? null;
 }
 
-export function resolveStopIds(db: any, stopId: string): string[] {
-  // If this is a parent station, return its child stop IDs
+export function makeStopNameResolver(
+  db: GtfsDb
+): (stopId: string) => string | null {
+  const cache = new Map<string, string | null>();
+  return (stopId) => {
+    let name = cache.get(stopId);
+    if (name === undefined && !cache.has(stopId)) {
+      name = getStopName(db, stopId);
+      cache.set(stopId, name);
+    }
+    return name ?? null;
+  };
+}
+
+export function resolveStopIds(db: GtfsDb, stopId: string): string[] {
   const children = db
     .prepare(`SELECT stop_id FROM stops WHERE parent_station = ?`)
     .all(stopId) as Array<{ stop_id: string }>;
@@ -97,13 +122,11 @@ export function resolveStopIds(db: any, stopId: string): string[] {
   if (children.length > 0) {
     return children.map((c) => c.stop_id);
   }
-
-  // Otherwise return the stop ID itself
   return [stopId];
 }
 
 export function searchStops(
-  db: any,
+  db: GtfsDb,
   query: string,
   limit: number = 10
 ): StopResult[] {
@@ -119,7 +142,7 @@ export function searchStops(
 }
 
 export function getStopDetails(
-  db: any,
+  db: GtfsDb,
   stopId: string
 ): { stop: StopResult | null; routes: RouteResult[] } {
   const stop = db
@@ -151,22 +174,27 @@ export function getStopDetails(
 }
 
 export function getScheduledArrivals(
-  db: any,
+  db: GtfsDb,
   stopIds: string[],
+  serviceIds: string[],
   routeId?: string,
   limit: number = 10,
   fromTime?: string
 ): Array<StopTimeResult & { route_id: string; trip_headsign: string | null }> {
-  const placeholders = stopIds.map(() => "?").join(", ");
+  if (stopIds.length === 0 || serviceIds.length === 0) return [];
+
+  const stopPlaceholders = stopIds.map(() => "?").join(", ");
+  const servicePlaceholders = serviceIds.map(() => "?").join(", ");
   let query = `
     SELECT st.trip_id, st.arrival_time, st.departure_time, st.stop_id, st.stop_sequence,
            st.stop_headsign, st.pickup_type, st.drop_off_type,
            t.route_id, t.trip_headsign
     FROM stop_times st
     INNER JOIN trips t ON st.trip_id = t.trip_id
-    WHERE st.stop_id IN (${placeholders})
+    WHERE st.stop_id IN (${stopPlaceholders})
+      AND t.service_id IN (${servicePlaceholders})
   `;
-  const params: any[] = [...stopIds];
+  const params: (string | number)[] = [...stopIds, ...serviceIds];
 
   if (fromTime) {
     query += ` AND st.arrival_time >= ?`;
@@ -181,31 +209,69 @@ export function getScheduledArrivals(
   query += ` ORDER BY st.arrival_time LIMIT ?`;
   params.push(limit);
 
-  return db.prepare(query).all(...params);
+  return db.prepare(query).all(...params) as Array<
+    StopTimeResult & { route_id: string; trip_headsign: string | null }
+  >;
 }
 
 export function listRoutes(
-  db: any,
-  routeType?: number
-): RouteResult[] {
+  db: GtfsDb,
+  options: {
+    routeType?: number;
+    query?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
+): { routes: RouteResult[]; total: number } {
+  const { routeType, query, limit, offset } = options;
+  const where: string[] = [];
+  const params: (string | number)[] = [];
+
   if (routeType !== undefined) {
-    return db
-      .prepare(
-        `SELECT route_id, route_short_name, route_long_name, route_type, route_color, route_text_color, agency_id
-         FROM routes WHERE route_type = ?`
-      )
-      .all(routeType) as RouteResult[];
+    where.push("route_type = ?");
+    params.push(routeType);
   }
-  return db
-    .prepare(
-      `SELECT route_id, route_short_name, route_long_name, route_type, route_color, route_text_color, agency_id
-       FROM routes`
-    )
-    .all() as RouteResult[];
+  if (query) {
+    where.push(
+      "(route_short_name LIKE ? OR route_long_name LIKE ? OR route_id LIKE ?)"
+    );
+    const pattern = `%${query}%`;
+    params.push(pattern, pattern, pattern);
+  }
+  const whereSql = where.length ? ` WHERE ${where.join(" AND ")}` : "";
+
+  let listSql = `SELECT route_id, route_short_name, route_long_name, route_type, route_color, route_text_color, agency_id
+                 FROM routes${whereSql}
+                 ORDER BY route_short_name, route_id`;
+  const listParams = [...params];
+  if (limit !== undefined) {
+    listSql += " LIMIT ?";
+    listParams.push(limit);
+    if (offset) {
+      listSql += " OFFSET ?";
+      listParams.push(offset);
+    }
+  }
+
+  const routes = db.prepare(listSql).all(...listParams) as RouteResult[];
+
+  // Skip the COUNT(*) scan when we can derive `total` from the result itself:
+  // no pagination, or the result came back smaller than the requested page.
+  const needsCount =
+    limit !== undefined && (routes.length === limit || (offset ?? 0) > 0);
+  const total = needsCount
+    ? (
+        db
+          .prepare(`SELECT COUNT(*) as n FROM routes${whereSql}`)
+          .get(...params) as { n: number }
+      ).n
+    : routes.length + (offset ?? 0);
+
+  return { routes, total };
 }
 
 export function getRouteDetails(
-  db: any,
+  db: GtfsDb,
   routeId: string,
   directionId?: number
 ): { route: RouteResult | null; stops: StopResult[] } {
@@ -226,7 +292,7 @@ export function getRouteDetails(
   let tripQuery = `SELECT t.trip_id FROM trips t
                    INNER JOIN stop_times st ON t.trip_id = st.trip_id
                    WHERE t.route_id = ?`;
-  const tripParams: any[] = [routeId];
+  const tripParams: (string | number)[] = [routeId];
 
   if (directionId !== undefined) {
     tripQuery += ` AND t.direction_id = ?`;
@@ -234,7 +300,9 @@ export function getRouteDetails(
   }
 
   tripQuery += ` GROUP BY t.trip_id ORDER BY COUNT(st.stop_sequence) DESC LIMIT 1`;
-  const trip = db.prepare(tripQuery).get(...tripParams);
+  const trip = db.prepare(tripQuery).get(...tripParams) as
+    | { trip_id: string }
+    | undefined;
 
   if (!trip) {
     return { route, stops: [] };
@@ -254,10 +322,10 @@ export function getRouteDetails(
 }
 
 export function getTripDetails(
-  db: any,
+  db: GtfsDb,
   tripId: string
 ): {
-  trip: any | null;
+  trip: TripRow | null;
   stop_times: Array<StopTimeResult & { stop_name: string }>;
 } {
   const trip = db
@@ -265,7 +333,7 @@ export function getTripDetails(
       `SELECT trip_id, route_id, service_id, trip_headsign, direction_id
        FROM trips WHERE trip_id = ?`
     )
-    .get(tripId);
+    .get(tripId) as TripRow | undefined;
 
   if (!trip) {
     return { trip: null, stop_times: [] };
@@ -280,7 +348,7 @@ export function getTripDetails(
        WHERE st.trip_id = ?
        ORDER BY st.stop_sequence`
     )
-    .all(tripId);
+    .all(tripId) as Array<StopTimeResult & { stop_name: string }>;
 
   return { trip, stop_times: stopTimes };
 }

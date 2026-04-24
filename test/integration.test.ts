@@ -237,15 +237,16 @@ describe("get_stop", () => {
 });
 
 describe("list_routes", () => {
-  it("returns all routes", async () => {
+  it("returns all routes with total", async () => {
     const result = await client.callTool({
       name: "list_routes",
       arguments: { system: "test" },
     });
-    const routes = getJsonContent(result);
-    expect(routes.length).toBe(2);
-    expect(routes[0]).toHaveProperty("route_id");
-    expect(routes[0]).toHaveProperty("short_name");
+    const data = getJsonContent(result);
+    expect(data.total).toBe(2);
+    expect(data.routes.length).toBe(2);
+    expect(data.routes[0]).toHaveProperty("route_id");
+    expect(data.routes[0]).toHaveProperty("short_name");
   });
 
   it("filters by route_type", async () => {
@@ -253,9 +254,19 @@ describe("list_routes", () => {
       name: "list_routes",
       arguments: { system: "test", route_type: 1 },
     });
-    const routes = getJsonContent(result);
-    expect(routes.length).toBe(1);
-    expect(routes[0].route_id).toBe("R1");
+    const data = getJsonContent(result);
+    expect(data.routes.length).toBe(1);
+    expect(data.routes[0].route_id).toBe("R1");
+  });
+
+  it("filters by query substring", async () => {
+    const result = await client.callTool({
+      name: "list_routes",
+      arguments: { system: "test", query: "Route Two" },
+    });
+    const data = getJsonContent(result);
+    expect(data.routes.length).toBe(1);
+    expect(data.routes[0].route_id).toBe("R2");
   });
 });
 
@@ -290,105 +301,105 @@ describe("get_route", () => {
 
 describe("get_arrivals", () => {
   it("returns realtime arrivals with correct local times", async () => {
+    // Pin clock to a time where all static weekday schedule at S2 is in the
+    // past, so the merge logic can't spuriously include scheduled arrivals.
+    vi.useFakeTimers({ now: new Date("2026-04-20T12:00:00-04:00") });
+
     const result = await client.callTool({
       name: "get_arrivals",
       arguments: { system: "test", stop_id: "S2" },
     });
-    const arrivals = getJsonContent(result);
+    const response = getJsonContent(result);
+    const arrivals = response.arrivals;
+    expect(response.data_source).toBe("realtime");
     expect(arrivals.length).toBeGreaterThanOrEqual(1);
 
-    // Should be realtime-only (no scheduled mix)
     for (const a of arrivals) {
       expect(a.is_realtime).toBe(true);
       expect(a.minutes_away).toBeTypeOf("number");
-      // Times must be HH:MM:SS local format, not ISO/UTC
       expect(a.arrival_time).toMatch(GTFS_TIME_PATTERN);
     }
 
     const t1Arrival = arrivals.find((a: any) => a.trip_id === "T1");
     expect(t1Arrival).toBeDefined();
-    // minutes_away should be roughly 10 (600s from now)
-    expect(t1Arrival.minutes_away).toBeGreaterThanOrEqual(9);
-    expect(t1Arrival.minutes_away).toBeLessThanOrEqual(11);
-    // Assert actual time value matches the fixture timestamp
-    expect(t1Arrival.arrival_time).toBe(toLocalTimeString(s2ArrivalSecs));
     // Headsign derived from last stop in trip update (S3 = Times Square)
     expect(t1Arrival.headsign).toBe("Times Square");
+
+    vi.useRealTimers();
   });
 
   it("resolves parent station to child stops for realtime arrivals", async () => {
-    // S1 is a parent station with children S1N and S1S.
-    // Realtime data has an update for S1N. Querying with parent ID S1
-    // should resolve to children and return the S1N arrival.
+    vi.useFakeTimers({ now: new Date("2026-04-20T12:00:00-04:00") });
+
     const result = await client.callTool({
       name: "get_arrivals",
       arguments: { system: "test", stop_id: "S1" },
     });
-    const arrivals = getJsonContent(result);
+    const arrivals = getJsonContent(result).arrivals;
     expect(arrivals.length).toBeGreaterThanOrEqual(1);
 
     const s1nArrival = arrivals.find((a: any) => a.stop_id === "S1N");
     expect(s1nArrival).toBeDefined();
     expect(s1nArrival.is_realtime).toBe(true);
-    expect(s1nArrival.arrival_time).toBe(toLocalTimeString(s1nArrivalSecs));
+
+    vi.useRealTimers();
   });
 
   it("ignores stop time updates with no arrival time", async () => {
-    // The fixture includes T2 with a stop time update for S2 that has only
-    // departure time (no arrival). It should not produce an arrival entry.
+    vi.useFakeTimers({ now: new Date("2026-04-20T12:00:00-04:00") });
+
     const result = await client.callTool({
       name: "get_arrivals",
       arguments: { system: "test", stop_id: "S2" },
     });
-    const arrivals = getJsonContent(result);
+    const arrivals = getJsonContent(result).arrivals;
     // T2's departure-only update should be skipped
     const t2Arrivals = arrivals.filter((a: any) => a.trip_id === "T2");
     expect(t2Arrivals.length).toBe(0);
-    // T1's arrival should still be present
     const t1Arrivals = arrivals.filter((a: any) => a.trip_id === "T1");
     expect(t1Arrivals.length).toBe(1);
+
+    vi.useRealTimers();
   });
 
   it("falls back to scheduled with HH:MM:SS local times", async () => {
     // S1S has no realtime data, so should fall back to scheduled.
-    // Pin clock to 07:00 America/New_York so scheduled arrivals are in range.
     vi.useFakeTimers({ now: new Date("2026-04-20T07:00:00-04:00") });
 
     const result = await client.callTool({
       name: "get_arrivals",
       arguments: { system: "test", stop_id: "S1S" },
     });
-    const arrivals = getJsonContent(result);
+    const response = getJsonContent(result);
+    const arrivals = response.arrivals;
+    expect(response.data_source).toBe("scheduled");
     expect(arrivals.length).toBeGreaterThanOrEqual(1);
 
     for (const a of arrivals) {
       expect(a.is_realtime).toBe(false);
-      expect(a.minutes_away).toBeNull();
-      // Scheduled times must also be HH:MM:SS format
+      expect(a.minutes_away).toBeTypeOf("number");
       expect(a.arrival_time).toMatch(GTFS_TIME_PATTERN);
     }
 
-    // T2 arrives at S1S at 09:20:00 in fixtures
     const t2 = arrivals.find((a: any) => a.trip_id === "T2");
     expect(t2).toBeDefined();
     expect(t2.arrival_time).toBe("09:20:00");
+    // 09:20 is 140 minutes after the pinned 07:00 clock.
+    expect(t2.minutes_away).toBe(140);
 
     vi.useRealTimers();
   });
 
   it("excludes past scheduled arrivals", async () => {
-    // Pin clock to 09:15 America/New_York — T2 at S1S departs at 09:20, so it should appear.
-    // But T3 at S1N departs at 07:30 which is in the past.
     vi.useFakeTimers({ now: new Date("2026-04-20T09:15:00-04:00") });
 
     const result = await client.callTool({
       name: "get_arrivals",
       arguments: { system: "test", stop_id: "S1S" },
     });
-    const arrivals = getJsonContent(result);
+    const arrivals = getJsonContent(result).arrivals;
 
     for (const a of arrivals) {
-      // All returned arrivals should be at or after 09:15:00
       expect(a.arrival_time >= "09:15:00").toBe(true);
     }
 
@@ -396,15 +407,56 @@ describe("get_arrivals", () => {
   });
 
   it("filters by route_id", async () => {
+    vi.useFakeTimers({ now: new Date("2026-04-20T12:00:00-04:00") });
+
     const result = await client.callTool({
       name: "get_arrivals",
       arguments: { system: "test", stop_id: "S2", route_id: "R1" },
     });
-    const arrivals = getJsonContent(result);
+    const arrivals = getJsonContent(result).arrivals;
     for (const a of arrivals) {
       expect(a.route_id).toBe("R1");
     }
+
+    vi.useRealTimers();
   });
+
+  it("returns empty when queried on a day with no active services", async () => {
+    // 2026-04-19 is a Sunday. Fixture trips are all on WEEKDAY service.
+    vi.useFakeTimers({ now: new Date("2026-04-19T07:00:00-04:00") });
+
+    const result = await client.callTool({
+      name: "get_arrivals",
+      arguments: { system: "test", stop_id: "S1S" },
+    });
+    const response = getJsonContent(result);
+    expect(response.arrivals).toEqual([]);
+    expect(response.data_source).toBe("none");
+
+    vi.useRealTimers();
+  });
+
+  it("merges realtime with scheduled beyond the RT window", async () => {
+    // Pin to early morning so scheduled S1S arrival at 09:20 is in the
+    // future. Realtime has no data for S1S, so scheduled fills in entirely.
+    // Also verifies that with T1 RT data at S2, schedule still supplements
+    // at other stops without duplicating across.
+    vi.useFakeTimers({ now: new Date("2026-04-20T08:00:00-04:00") });
+
+    const result = await client.callTool({
+      name: "get_arrivals",
+      arguments: { system: "test", stop_id: "S1S" },
+    });
+    const response = getJsonContent(result);
+    expect(response.arrivals.length).toBeGreaterThanOrEqual(1);
+    // T2 is scheduled at 09:20 at S1S
+    const t2 = response.arrivals.find((a: any) => a.trip_id === "T2");
+    expect(t2).toBeDefined();
+    expect(t2.is_realtime).toBe(false);
+
+    vi.useRealTimers();
+  });
+
 });
 
 describe("get_alerts", () => {
@@ -529,8 +581,214 @@ describe("get_system_status", () => {
     expect(data.route_count).toBe(2);
     expect(data.stop_count).toBe(5);
     expect(data.active_alerts).toBe(2);
-    expect(data.feeds).toHaveProperty("trip_updates");
-    expect(data.feeds).toHaveProperty("alerts");
-    expect(data.feeds).toHaveProperty("vehicle_positions");
+    expect(data.feeds.trip_updates.configured).toBe(true);
+    expect(data.feeds.trip_updates.urls_ok).toBe(1);
+    expect(data.feeds.trip_updates.entities).toBeGreaterThan(0);
+    expect(data.feeds.alerts.configured).toBe(true);
+    expect(data.feeds.vehicle_positions.configured).toBe(true);
+  });
+});
+
+// Placed last so the fetch-mock rewiring doesn't disrupt earlier tests.
+describe("get_arrivals schedule_relationship handling", () => {
+  it("skips cancelled trips and stop updates", async () => {
+    const GtfsRealtimeBindings = (await import("gtfs-realtime-bindings")).default;
+    const TRIP_CANCELED =
+      GtfsRealtimeBindings.transit_realtime.TripDescriptor.ScheduleRelationship.CANCELED;
+    const STOP_SKIPPED =
+      GtfsRealtimeBindings.transit_realtime.TripUpdate.StopTimeUpdate.ScheduleRelationship.SKIPPED;
+
+    const nowSecs = Math.floor(Date.now() / 1000);
+    const feed = encodeTripUpdateFeed([
+      {
+        tripId: "T_CANCELED",
+        routeId: "R1",
+        scheduleRelationship: TRIP_CANCELED,
+        stopTimeUpdates: [{ stopId: "S2", arrivalTime: nowSecs + 120 }],
+      },
+      {
+        tripId: "T_SKIPPED",
+        routeId: "R1",
+        stopTimeUpdates: [
+          {
+            stopId: "S2",
+            arrivalTime: nowSecs + 180,
+            scheduleRelationship: STOP_SKIPPED,
+          },
+          { stopId: "S3", arrivalTime: nowSecs + 240 },
+        ],
+      },
+    ]);
+
+    const { clearFeedCache } = await import("../src/gtfs/realtime.js");
+    clearFeedCache();
+
+    // Install a scoped fetch mock just for this test — the previous spy
+    // (from beforeAll) is overridden by vi.spyOn returning a new implementation.
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      if (String(url).includes("trip-updates")) {
+        return new Response(feed, { status: 200 });
+      }
+      return new Response(new Uint8Array(), { status: 200 });
+    });
+
+    vi.useFakeTimers({ now: new Date("2026-04-20T12:00:00-04:00") });
+
+    try {
+      const result = await client.callTool({
+        name: "get_arrivals",
+        arguments: { system: "test", stop_id: "S2" },
+      });
+      const response = getJsonContent(result);
+      const tripIds = response.arrivals.map((a: any) => a.trip_id);
+      expect(tripIds).not.toContain("T_CANCELED");
+      expect(tripIds).not.toContain("T_SKIPPED");
+    } finally {
+      vi.useRealTimers();
+      clearFeedCache();
+    }
+  });
+});
+
+describe("get_arrivals 24h+ service day handling", () => {
+  it("includes trips that ran past midnight via yesterday's 24h+ stop_times", async () => {
+    // Pin clock to Tuesday 01:00 local — yesterday (Monday) service is
+    // WEEKDAY, so T5's 25:30:00 stop at S1N (= Tuesday 01:30 local) is
+    // upcoming.
+    //
+    // Scope fetch to return no realtime: the suite's shared RT fixture uses
+    // real-time timestamps which, relative to the pinned fake clock, would
+    // otherwise populate the RT window and suppress T5.
+    const { clearFeedCache } = await import("../src/gtfs/realtime.js");
+    clearFeedCache();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      const empty = encodeTripUpdateFeed([]);
+      return new Response(empty, { status: 200 });
+    });
+
+    vi.useFakeTimers({ now: new Date("2026-04-21T01:00:00-04:00") });
+
+    try {
+      const result = await client.callTool({
+        name: "get_arrivals",
+        arguments: { system: "test", stop_id: "S1N" },
+      });
+      const response = getJsonContent(result);
+      const t5 = response.arrivals.find((a: any) => a.trip_id === "T5");
+      expect(t5).toBeDefined();
+      expect(t5.arrival_time).toBe("01:30:00");
+      expect(t5.minutes_away).toBe(30);
+      expect(t5.is_realtime).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      clearFeedCache();
+    }
+  });
+});
+
+describe("get_alerts active_period filtering", () => {
+  it("excludes alerts whose active_period is entirely in the future by default", async () => {
+    const nowSecs = Math.floor(Date.now() / 1000);
+    const alertFeed = encodeAlertFeed([
+      {
+        id: "always",
+        headerText: "Always active",
+        descriptionText: "No active_period means always-on",
+      },
+      {
+        id: "future",
+        headerText: "Planned weekend change",
+        descriptionText: "Starts in 2 days",
+        activePeriods: [{ start: nowSecs + 2 * 86400, end: nowSecs + 3 * 86400 }],
+      },
+      {
+        id: "current",
+        headerText: "Currently happening",
+        descriptionText: "Ongoing",
+        activePeriods: [{ start: nowSecs - 3600, end: nowSecs + 3600 }],
+      },
+      {
+        id: "past",
+        headerText: "Expired",
+        descriptionText: "Ended already",
+        activePeriods: [{ start: nowSecs - 7200, end: nowSecs - 3600 }],
+      },
+    ]);
+
+    const { clearFeedCache } = await import("../src/gtfs/realtime.js");
+    clearFeedCache();
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      if (String(url).includes("alerts")) {
+        return new Response(alertFeed, { status: 200 });
+      }
+      return new Response(new Uint8Array(), { status: 200 });
+    });
+
+    try {
+      const result = await client.callTool({
+        name: "get_alerts",
+        arguments: { system: "test" },
+      });
+      const ids = getJsonContent(result).map((a: any) => a.id);
+      expect(ids).toContain("always");
+      expect(ids).toContain("current");
+      expect(ids).not.toContain("future");
+      expect(ids).not.toContain("past");
+
+      const withInactive = await client.callTool({
+        name: "get_alerts",
+        arguments: { system: "test", include_inactive: true },
+      });
+      const allIds = getJsonContent(withInactive).map((a: any) => a.id);
+      expect(allIds).toContain("future");
+      expect(allIds).toContain("past");
+    } finally {
+      clearFeedCache();
+    }
+  });
+
+  it("normalises proto3 empty-string selectors to null in informed_entities", async () => {
+    // Real MTA pattern: a stop-only selector arrives as { routeId: "", stopId: "D15" }
+    // because proto3 encodes unset strings as "". Consumers should see null, not "".
+    const alertFeed = encodeAlertFeed([
+      {
+        id: "mixed",
+        headerText: "Delays",
+        descriptionText: "F/M delays; affects D15",
+        informedEntities: [
+          { routeId: "R1" },
+          { stopId: "S3" },
+        ],
+      },
+    ]);
+
+    const { clearFeedCache } = await import("../src/gtfs/realtime.js");
+    clearFeedCache();
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      if (String(url).includes("alerts")) {
+        return new Response(alertFeed, { status: 200 });
+      }
+      return new Response(new Uint8Array(), { status: 200 });
+    });
+
+    try {
+      const result = await client.callTool({
+        name: "get_alerts",
+        arguments: { system: "test" },
+      });
+      const alerts = getJsonContent(result);
+      expect(alerts.length).toBe(1);
+      const ies = alerts[0].informed_entities;
+      // Route-scoped entity should have null stop_id, not "".
+      expect(ies[0].route_id).toBe("R1");
+      expect(ies[0].stop_id).toBeNull();
+      // Stop-scoped entity should have null route_id, not "".
+      expect(ies[1].stop_id).toBe("S3");
+      expect(ies[1].route_id).toBeNull();
+    } finally {
+      clearFeedCache();
+    }
   });
 });

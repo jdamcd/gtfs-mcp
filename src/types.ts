@@ -6,6 +6,12 @@ export interface Arrival {
   minutes_away: number | null; // minutes until arrival (realtime only)
   headsign: string | null;
   is_realtime: boolean;
+  is_added?: boolean; // trip added by realtime, not in static schedule
+}
+
+export interface ArrivalsResponse {
+  data_source: "realtime" | "scheduled" | "mixed" | "none";
+  arrivals: Arrival[];
 }
 
 export interface VehiclePosition {
@@ -19,6 +25,8 @@ export interface VehiclePosition {
   timestamp: string | null;
   stop_id: string | null;
   current_status: string | null;
+  occupancy_status: string | null;
+  congestion_level: string | null;
 }
 
 export interface ActivePeriod {
