@@ -172,6 +172,21 @@ describe("AR-01 / AR-03 / AR-04 get_arrivals", () => {
     expect(ruleIds(rec, ctx())).not.toContain("AR-03");
   });
 
+  it("flags AR-05 when any arrival is in the past", () => {
+    const rec = ok("get_arrivals", {}, arrivalsResp([
+      { trip_id: "T1", stop_id: "S1", arrival_time: "07:40:00", minutes_away: -20, is_realtime: true },
+      { trip_id: "T2", stop_id: "S1", arrival_time: "08:05:00", minutes_away: 5, is_realtime: true },
+    ]));
+    expect(ruleIds(rec, ctx())).toContain("AR-05");
+  });
+
+  it("accepts minutes_away of 0 as 'arriving now'", () => {
+    const rec = ok("get_arrivals", {}, arrivalsResp([
+      { trip_id: "T1", stop_id: "S1", arrival_time: "08:00:00", minutes_away: 0, is_realtime: true },
+    ]));
+    expect(ruleIds(rec, ctx())).not.toContain("AR-05");
+  });
+
   it("records realtime trip_ids for X-ARR-TRIP cross-check", () => {
     const c = ctx();
     runInvariants(

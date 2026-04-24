@@ -117,6 +117,13 @@ export function registerArrivalTools(ctx: ToolContext): void {
           if (stu.scheduleRelationship === STOP_SKIPPED) continue;
           if (stu.scheduleRelationship === STOP_NO_DATA) continue;
 
+          // Skip past arrivals — a feed often lists the current trip's
+          // already-visited stops. Keep a 30s grace period so "train is here
+          // now" shows as 0 minutes away instead of disappearing. The window
+          // update above still counts past times so schedule doesn't refill.
+          const minutes_away = Math.round((absMs - nowMs) / 60_000);
+          if (minutes_away < 0) continue;
+
           realtime.push({
             absMs,
             arrival: {
@@ -124,7 +131,7 @@ export function registerArrivalTools(ctx: ToolContext): void {
               route_id: tripRouteId ?? "unknown",
               stop_id: stu.stopId,
               arrival_time: formatLocalTime(new Date(absMs), tz),
-              minutes_away: Math.round((absMs - nowMs) / 60_000),
+              minutes_away,
               headsign: lastStopId ? resolveHeadsign(lastStopId) : null,
               is_realtime: true,
               ...(isAdded ? { is_added: true } : {}),

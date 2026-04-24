@@ -265,6 +265,18 @@ function checkGetArrivals(record: CallRecord, ctx: RunContext): Violation[] {
     }
   }
 
+  const past = arrivals.find(
+    (a) => typeof a.minutes_away === "number" && a.minutes_away < 0
+  );
+  if (past) {
+    violations.push({
+      rule: "AR-05",
+      severity: "error",
+      message: "get_arrivals contains arrivals in the past",
+      context: { trip_id: past.trip_id, stop_id: past.stop_id, minutes_away: past.minutes_away },
+    });
+  }
+
   // Loop routes legitimately visit the same stop twice on the same trip at
   // different times. Only flag as duplication when arrival_time also matches.
   const seen = new Set<string>();

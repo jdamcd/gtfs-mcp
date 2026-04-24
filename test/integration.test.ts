@@ -685,6 +685,62 @@ describe("get_arrivals 24h+ service day handling", () => {
     }
   });
 
+  it("filters past realtime arrivals but keeps them in the RT window", async () => {
+    // RT feeds routinely publish the current trip's already-visited stops.
+    // Those shouldn't surface as "next" arrivals with negative minutes_away.
+    // They must still populate the RT window so schedule doesn't refill them.
+    const fakeNow = new Date("2026-04-20T08:30:00-04:00");
+    const pastSecs = Math.floor(fakeNow.getTime() / 1000) - 20 * 60;
+    const futureSecs = Math.floor(fakeNow.getTime() / 1000) + 5 * 60;
+
+    const feed = encodeTripUpdateFeed([
+      {
+        tripId: "T1",
+        routeId: "R1",
+        stopTimeUpdates: [
+          { stopId: "S1N", arrivalTime: pastSecs },
+          { stopId: "S2", arrivalTime: futureSecs },
+        ],
+      },
+    ]);
+
+    const { clearFeedCache } = await import("../src/gtfs/realtime.js");
+    clearFeedCache();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      if (String(url).includes("trip-updates")) {
+        return new Response(feed, { status: 200 });
+      }
+      return new Response(encodeTripUpdateFeed([]), { status: 200 });
+    });
+    vi.useFakeTimers({ now: fakeNow });
+
+    try {
+      const resS1N = await client.callTool({
+        name: "get_arrivals",
+        arguments: { system: "test", stop_id: "S1N" },
+      });
+      const s1nArrivals = getJsonContent(resS1N).arrivals;
+      // T1 at S1N was 20 min ago — must not surface. Schedule for T1 at S1N
+      // (08:00:00 static) is also past the RT window so shouldn't refill.
+      expect(s1nArrivals.find((a: any) => a.trip_id === "T1")).toBeUndefined();
+      // Every surfaced arrival should be non-negative.
+      for (const a of s1nArrivals) expect(a.minutes_away).toBeGreaterThanOrEqual(0);
+
+      const resS2 = await client.callTool({
+        name: "get_arrivals",
+        arguments: { system: "test", stop_id: "S2" },
+      });
+      const s2Arrivals = getJsonContent(resS2).arrivals;
+      const t1S2 = s2Arrivals.find((a: any) => a.trip_id === "T1");
+      expect(t1S2).toBeDefined();
+      expect(t1S2.is_realtime).toBe(true);
+      expect(t1S2.minutes_away).toBeGreaterThanOrEqual(0);
+    } finally {
+      vi.useRealTimers();
+      clearFeedCache();
+    }
+  });
+
   it("suppresses scheduled rows whose trip_id already appeared in realtime, even when RT predicts earlier than schedule", async () => {
     // Stable-id agencies (MBTA, BART) use matching trip_ids between static
     // and realtime. If RT predicts an early arrival, the time-window filter
