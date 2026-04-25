@@ -1,47 +1,62 @@
-# gtfs-mcp
+# GTFS MCP
 
-An MCP server for querying GTFS static schedules and GTFS-RT realtime feeds. Works with any GTFS-compatible transit system. Includes a ready-to-use config for NYC Subway (MTA).
+This is an MCP server for querying public transit info from GTFS schedules and GTFS-RT realtime feeds. It works with any GTFS-compatible transit system, and includes a ready-to-use config for NYC Subway (MTA).
 
-**Service alerts**
+Ask things like *"When's the next L from Bedford Av?"*, *"Any service alerts on the G?"*, or *"What stops does the 7 train serve?"*.
+
+**Service alerts example**
 
 ![Asking Claude about G train service alerts at Nassau Av](readme_img/example_alerts.png)
 
 
-**Arrivals**
+**Arrivals example**
 
 ![Asking Claude about L train arrival times from Bedford Av](readme_img/example_arrivals.png)
 
-## Setup
+## Quickstart
+
+Requires Node 22+.
 
 ```bash
+git clone https://github.com/jdamcd/gtfs-mcp.git && cd gtfs-mcp
 npm install
 npm run build
 ```
 
-## Configuration
+Add to your Claude Desktop config (`claude_desktop_config.json`):
 
-The server reads a JSON config file defining transit systems. Point to it with the `GTFS_MCP_CONFIG` environment variable.
-
-An MTA Subway config is included at `config.mta.json` and works with no API key:
-
-```bash
-GTFS_MCP_CONFIG=./config.mta.json npm start
+```json
+{
+  "mcpServers": {
+    "gtfs": {
+      "command": "node",
+      "args": ["/absolute/path/to/gtfs-mcp/dist/index.js"],
+      "env": {
+        "GTFS_MCP_CONFIG": "/absolute/path/to/gtfs-mcp/config.mta.json"
+      }
+    }
+  }
+}
 ```
 
-To add your own systems, create a config file with the following structure:
+Restart Claude Desktop and ask an NYC transit question. The first query triggers a GTFS schedule download (~30s for MTA). Subsequent queries are fast.
+
+### Adding other transit systems
+
+The server reads a JSON config defining one or more transit systems, pointed to by `GTFS_MCP_CONFIG`. Find feeds for your local agency in the [Mobility Database](https://mobilitydatabase.org/).
 
 ```json
 {
   "systems": [
     {
-      "id": "my-system",
-      "name": "My Transit System",
-      "schedule_url": "https://example.com/gtfs.zip",
+      "id": "mbta",
+      "name": "MBTA Boston",
+      "schedule_url": "https://cdn.mbta.com/MBTA_GTFS.zip",
       "timezone": "America/New_York",
       "realtime": {
-        "trip_updates": ["https://example.com/trip-updates"],
-        "vehicle_positions": ["https://example.com/vehicle-positions"],
-        "alerts": ["https://example.com/alerts"]
+        "trip_updates": ["https://cdn.mbta.com/realtime/TripUpdates.pb"],
+        "vehicle_positions": ["https://cdn.mbta.com/realtime/VehiclePositions.pb"],
+        "alerts": ["https://cdn.mbta.com/realtime/Alerts.pb"]
       },
       "auth": null
     }
@@ -53,13 +68,13 @@ To add your own systems, create a config file with the following structure:
 
 Each realtime feed type accepts multiple URLs (e.g. MTA splits trip updates across 8 feeds). Set any feed type to `[]` if the system doesn't provide it.
 
-`timezone` is the agency's IANA timezone (e.g. `"America/New_York"`, `"Europe/London"`). It's used to compare scheduled stop times to "now" and to render times in responses, so the server produces the same results regardless of where it runs. The value matches `agency_timezone` in the system's GTFS `agency.txt`.
+`timezone` is the agency's IANA timezone (e.g. `"Europe/London"`). It's used to compare scheduled stop times to "now" and render times in responses regardless of server timezone.
 
 ### Authenticated feeds
 
-Some transit APIs require an API key. Configure auth per system — the actual key is read from an environment variable at runtime.
+Some transit APIs require an API key. Keys are read from environment variables at runtime. Set them in the Claude Desktop `env` block alongside `GTFS_MCP_CONFIG`.
 
-**Query parameter** (appended to URL):
+**Query parameter**:
 ```json
 {
   "auth": {
@@ -83,26 +98,6 @@ Some transit APIs require an API key. Configure auth per system — the actual k
 
 Set `auth` to `null` for systems that don't require authentication.
 
-## Using with Claude Desktop
-
-Add to your `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "gtfs": {
-      "command": "node",
-      "args": ["/absolute/path/to/gtfs-mcp/dist/index.js"],
-      "env": {
-        "GTFS_MCP_CONFIG": "/absolute/path/to/gtfs-mcp/config.mta.json"
-      }
-    }
-  }
-}
-```
-
-Add any API keys your systems need to the `env` block.
-
 ## Tools
 
 | Tool | Description | Parameters |
@@ -119,35 +114,28 @@ Add any API keys your systems need to the `env` block.
 | `get_trip` | Trip stop sequence with realtime delays | `system`, `trip_id` |
 | `get_system_status` | System overview: counts, alerts, feed health | `system` |
 
-The `system` parameter is the system ID from your config (e.g. `"mta-subway"`).
+The `system` parameter is the system ID from your config (e.g. `"mta-subway"`). IDs flow between tools — e.g. `search_stops` returns a `stop_id` that `get_arrivals` consumes.
 
-## How it works
-
-**Static GTFS** data (schedules, stops, routes) is downloaded as a ZIP on first use and imported into a local SQLite database at `data_dir/{system_id}/`. It re-downloads automatically when the database is older than `schedule_refresh_hours`.
-
-**GTFS-RT** feeds (trip updates, vehicle positions, alerts) are fetched on demand with a 30-second in-memory cache. Systems with multiple feeds (MTA has 8 trip update feeds) are fetched in parallel and merged.
-
-**Arrivals** merge realtime and scheduled in a single stream. Realtime is authoritative within its horizon (per stop and route), scheduled fills in beyond. Cancelled trips and skipped stops drop out; trips that only exist in realtime (e.g. added service) come through. Scheduled arrivals honor today's active `service_id` from `calendar.txt` / `calendar_dates.txt`, and services that roll past midnight (`25:30:00`-style stop times) are rendered in wall-clock time for the current calendar day.
-
-## Testing
+## Development
 
 ```bash
-npm test
+npm test               # vitest run
+npm run test:watch     # watch mode
 ```
 
 ### Evals
 
-LLM evals use [promptfoo](https://promptfoo.dev/) to verify that a model selects the correct tools for natural-language transit queries. Requires an `ANTHROPIC_API_KEY` set in `.env` or as an environment variable.
+LLM evals use [promptfoo](https://promptfoo.dev/) to verify that a model selects the correct tools for natural-language transit queries. Requires `ANTHROPIC_API_KEY` set in `.env` or the environment.
 
 ```bash
 npm run build
 npm run eval
-npm run eval:view   # open web UI to inspect results
+npm run eval:view   # web UI to inspect results
 ```
 
 ### MCP inspector
 
-Test with the MCP inspector:
+Test tools interactively without a Claude client:
 
 ```bash
 GTFS_MCP_CONFIG=./config.mta.json npx @modelcontextprotocol/inspector node dist/index.js
