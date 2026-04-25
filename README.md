@@ -119,8 +119,7 @@ The `system` parameter is the system ID from your config (e.g. `"mta-subway"`). 
 ## Development
 
 ```bash
-npm test               # vitest run
-npm run test:watch     # watch mode
+npm test
 ```
 
 ### Evals
@@ -139,4 +138,15 @@ Test tools interactively without a Claude client:
 
 ```bash
 GTFS_MCP_CONFIG=./config.mta.json npx @modelcontextprotocol/inspector node dist/index.js
+```
+
+### Invariant testing
+
+`scripts/campaign.ts` exercises the full tool surface against real GTFS feeds across the systems in `config.testing.json`, checks the responses for invariant violations, and writes per-call JSON under `campaign-results/`.
+
+> ⚠️ This downloads static GTFS data for every configured system into `./data-testing/` — up to ~10GB.
+
+```bash
+GTFS_MCP_CONFIG=./config.testing.json npx tsx scripts/campaign.ts --smoke              # quick pass across all systems
+GTFS_MCP_CONFIG=./config.testing.json npx tsx scripts/campaign.ts --deep mbta,vbb      # full phases on selected systems
 ```
