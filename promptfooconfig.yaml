@@ -1,8 +1,10 @@
 description: "GTFS MCP tools evaluation"
 
-# The system prompt provides the transit system ID upfront because promptfoo
-# only supports single-turn tool calling. Without it, the model spends its
-# one turn calling list_systems to discover the ID instead of the target tool.
+# promptfoo's Anthropic provider is single-turn, so the model can't follow the
+# server's instructions to call list_systems first and still reach the target
+# tool. This system prompt pre-supplies the system_id so we can evaluate
+# target-tool selection in isolation; real clients (Claude Desktop) get the
+# discovery flow via the MCP server's `instructions` field.
 prompts:
   - id: "transit-query"
     raw: |

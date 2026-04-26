@@ -11,10 +11,16 @@ import { jsonResponse } from "./tools/helpers.js";
 import type { ToolContext } from "./tools/helpers.js";
 
 export function createServer(config: AppConfig): McpServer {
-  const server = new McpServer({
-    name: "gtfs-mcp",
-    version: "1.0.0",
-  });
+  const server = new McpServer(
+    {
+      name: "gtfs-mcp",
+      version: "1.0.0",
+    },
+    {
+      instructions:
+        "Resolve identifiers via the discovery tools before calling tools that take them: list_systems for system, search_stops or find_nearby_stops for stop_id, list_routes for route_id. Do not guess these IDs — guessed values will fail. Use the tools to answer transit queries; do not rely on prior knowledge of specific networks.",
+    }
+  );
 
   const systems = new Map<string, SystemConfig>();
   for (const system of config.systems) {

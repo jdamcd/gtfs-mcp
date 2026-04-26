@@ -65,4 +65,4 @@ npm run eval:view      # open web UI to inspect results
 
 Set `ANTHROPIC_API_KEY` and `GTFS_MCP_CONFIG` in `.env` (gitignored) or as environment variables. Evals use `config.mta.json` for live MTA data.
 
-**Limitation:** promptfoo's Anthropic provider only supports single-turn tool calling. The system prompt provides the `mta-subway` system ID upfront so the model can call the target tool directly instead of spending its one turn on `list_systems`.
+**Limitation:** promptfoo's Anthropic provider only supports single-turn tool calling, so multi-step flows (discovery + target call) can't be evaluated end-to-end. The eval system prompt pre-supplies the `mta-subway` system ID so we can test target-tool selection in isolation. Real clients (Claude Desktop) get discovery guidance from the MCP server's `instructions` field instead.
