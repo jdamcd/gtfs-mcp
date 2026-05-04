@@ -10,13 +10,27 @@ import {
 } from "./helpers.js";
 
 export function registerStopTools(ctx: ToolContext): void {
-  ctx.server.tool(
+  ctx.server.registerTool(
     "search_stops",
-    "Find stops by name (case-insensitive substring on stop_name). Returns parent stations and standalone stops, not child platforms. Use this when the user names a stop; use find_nearby_stops when they give coordinates or 'near me'.",
     {
-      system: z.string().describe("System ID"),
-      query: z.string().describe("Case-insensitive substring of stop_name"),
-      limit: z.number().default(10).describe("Maximum number of results"),
+      title: "Search stops by name",
+      description:
+        "Find stops by name (case-insensitive substring on stop_name). Returns parent stations and standalone stops, not child platforms. Use this when the user names a stop; use find_nearby_stops when they give coordinates or 'near me'.",
+      inputSchema: {
+        system: z.string().describe("System ID"),
+        query: z.string().min(1).describe("Case-insensitive substring of stop_name"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .default(10)
+          .describe("Maximum number of results"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+      },
     },
     async ({ system, query, limit }) => {
       const config = resolveSystem(ctx.systems, system);
@@ -36,15 +50,42 @@ export function registerStopTools(ctx: ToolContext): void {
     }
   );
 
-  ctx.server.tool(
+  ctx.server.registerTool(
     "find_nearby_stops",
-    "Find stops near a latitude/longitude, ordered by distance. Returns parent stations and standalone stops (not child platforms). Requires coordinates — if the user gave a place name, search_stops with that name first to get coordinates.",
     {
-      system: z.string().describe("System ID"),
-      lat: z.number().describe("Latitude in decimal degrees"),
-      lon: z.number().describe("Longitude in decimal degrees"),
-      radius_m: z.number().default(500).describe("Search radius in meters"),
-      limit: z.number().default(10).describe("Maximum number of results"),
+      title: "Find nearby stops",
+      description:
+        "Find stops near a latitude/longitude, ordered by distance. Returns parent stations and standalone stops (not child platforms). Requires coordinates — if the user gave a place name, search_stops with that name first to get coordinates.",
+      inputSchema: {
+        system: z.string().describe("System ID"),
+        lat: z
+          .number()
+          .min(-90)
+          .max(90)
+          .describe("Latitude in decimal degrees"),
+        lon: z
+          .number()
+          .min(-180)
+          .max(180)
+          .describe("Longitude in decimal degrees"),
+        radius_m: z
+          .number()
+          .positive()
+          .max(50000)
+          .default(500)
+          .describe("Search radius in meters (max 50000)"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .default(10)
+          .describe("Maximum number of results"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+      },
     },
     async ({ system, lat, lon, radius_m, limit }) => {
       const config = resolveSystem(ctx.systems, system);
@@ -65,12 +106,22 @@ export function registerStopTools(ctx: ToolContext): void {
     }
   );
 
-  ctx.server.tool(
+  ctx.server.registerTool(
     "get_stop",
-    "Get a stop's details and the routes serving it. Accepts any stop_id (parent station, standalone, or child platform). Use search_stops or find_nearby_stops first if only a name is known.",
     {
-      system: z.string().describe("System ID"),
-      stop_id: z.string().describe("Stop ID from search_stops / find_nearby_stops / get_route"),
+      title: "Get stop details",
+      description:
+        "Get a stop's details and the routes serving it. Accepts any stop_id (parent station, standalone, or child platform). Use search_stops or find_nearby_stops first if only a name is known.",
+      inputSchema: {
+        system: z.string().describe("System ID"),
+        stop_id: z
+          .string()
+          .describe("Stop ID from search_stops / find_nearby_stops / get_route"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+      },
     },
     async ({ system, stop_id }) => {
       const config = resolveSystem(ctx.systems, system);

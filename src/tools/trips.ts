@@ -21,12 +21,20 @@ import {
 } from "./helpers.js";
 
 export function registerTripTools(ctx: ToolContext): void {
-  ctx.server.tool(
+  ctx.server.registerTool(
     "get_trip",
-    "Get a trip's stop sequence with realtime delay/status per stop. Returns top-level `trip.status` (scheduled/canceled/added) and per-stop `status` (scheduled/skipped/no_data). For agencies like MTA whose realtime trip_ids are synthetic, returns a realtime-only synthesis when the trip_id isn't in the static schedule. Use trip_ids returned by get_arrivals; they are short-lived.",
     {
-      system: z.string().describe("System ID"),
-      trip_id: z.string().describe("Trip ID, from get_arrivals"),
+      title: "Get trip details",
+      description:
+        "Get a trip's stop sequence with realtime delay/status per stop. Returns top-level `trip.status` (scheduled/canceled/added) and per-stop `status` (scheduled/skipped/no_data). For agencies like MTA whose realtime trip_ids are synthetic, returns a realtime-only synthesis when the trip_id isn't in the static schedule. Use trip_ids returned by get_arrivals; they are short-lived.",
+      inputSchema: {
+        system: z.string().describe("System ID"),
+        trip_id: z.string().describe("Trip ID, from get_arrivals"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: true,
+      },
     },
     async ({ system, trip_id }) => {
       const config = resolveSystem(ctx.systems, system);

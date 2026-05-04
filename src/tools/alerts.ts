@@ -27,17 +27,27 @@ function nullIfEmpty(s: string | null | undefined): string | null {
 }
 
 export function registerAlertTools(ctx: ToolContext): void {
-  ctx.server.tool(
+  ctx.server.registerTool(
     "get_alerts",
-    "Get service alerts for a transit system. By default returns only alerts active right now (per GTFS-RT active_period semantics); set include_inactive=true to include planned/future/expired alerts.",
     {
-      system: z.string().describe("System ID"),
-      route_id: z.string().optional().describe("Filter by route ID"),
-      stop_id: z.string().optional().describe("Filter by stop ID"),
-      include_inactive: z
-        .boolean()
-        .default(false)
-        .describe("Include alerts whose active_period does not cover the current time"),
+      title: "Get service alerts",
+      description:
+        "Get service alerts for a transit system. By default returns only alerts active right now (per GTFS-RT active_period semantics); set include_inactive=true to include planned/future/expired alerts.",
+      inputSchema: {
+        system: z.string().describe("System ID"),
+        route_id: z.string().optional().describe("Filter by route ID"),
+        stop_id: z.string().optional().describe("Filter by stop ID"),
+        include_inactive: z
+          .boolean()
+          .default(false)
+          .describe(
+            "Include alerts whose active_period does not cover the current time"
+          ),
+      },
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: true,
+      },
     },
     async ({ system, route_id, stop_id, include_inactive }) => {
       const config = resolveSystem(ctx.systems, system);

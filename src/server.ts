@@ -35,10 +35,17 @@ export function createServer(config: AppConfig): McpServer {
   };
 
   // Register list_systems tool
-  server.tool(
+  server.registerTool(
     "list_systems",
-    "List configured transit systems and their IDs. Call this first when the user hasn't specified a system, or to discover valid `system` values for other tools.",
-    {},
+    {
+      title: "List transit systems",
+      description:
+        "List configured transit systems and their IDs. Call this first when the user hasn't specified a system, or to discover valid `system` values for other tools.",
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+      },
+    },
     async () =>
       jsonResponse(config.systems.map((s) => ({ id: s.id, name: s.name })))
   );

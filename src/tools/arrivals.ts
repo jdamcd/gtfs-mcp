@@ -35,17 +35,30 @@ import {
 type Sortable = { arrival: Arrival; absMs: number };
 
 export function registerArrivalTools(ctx: ToolContext): void {
-  ctx.server.tool(
+  ctx.server.registerTool(
     "get_arrivals",
-    "Get upcoming arrivals at a stop. Accepts a parent station ID and resolves to all child platforms. Merges realtime data (authoritative within its horizon) with scheduled times (fills beyond). Cancelled trips and skipped stops are excluded; includes services that roll past midnight via yesterday's 24h+ stop_times. Returns data_source indicating which inputs contributed.",
     {
-      system: z.string().describe("System ID"),
-      stop_id: z.string().describe("Stop ID (parent station IDs are resolved to child platforms)"),
-      route_id: z.string().optional().describe("Filter by route ID"),
-      limit: z
-        .number()
-        .default(10)
-        .describe("Maximum number of arrivals to return"),
+      title: "Get arrivals at a stop",
+      description:
+        "Get upcoming arrivals at a stop. Accepts a parent station ID and resolves to all child platforms. Merges realtime data (authoritative within its horizon) with scheduled times (fills beyond). Cancelled trips and skipped stops are excluded; includes services that roll past midnight via yesterday's 24h+ stop_times. Returns data_source indicating which inputs contributed.",
+      inputSchema: {
+        system: z.string().describe("System ID"),
+        stop_id: z
+          .string()
+          .describe("Stop ID (parent station IDs are resolved to child platforms)"),
+        route_id: z.string().optional().describe("Filter by route ID"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .default(10)
+          .describe("Maximum number of arrivals to return"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: true,
+      },
     },
     async ({ system, stop_id, route_id, limit }) => {
       const config = resolveSystem(ctx.systems, system);

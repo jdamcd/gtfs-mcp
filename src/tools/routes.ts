@@ -10,29 +10,46 @@ import {
 } from "./helpers.js";
 
 export function registerRouteTools(ctx: ToolContext): void {
-  ctx.server.tool(
+  ctx.server.registerTool(
     "list_routes",
-    "List routes in a transit system. For large feeds (1000+ routes), filter with `query` (substring match on short/long name or route_id) or `route_type`. Returns `total` so the caller can tell when results are truncated.",
     {
-      system: z.string().describe("System ID"),
-      query: z
-        .string()
-        .optional()
-        .describe("Substring match (case-insensitive) on short_name, long_name, or route_id"),
-      route_type: z
-        .number()
-        .optional()
-        .describe(
-          "Filter by GTFS route_type: 0=tram, 1=subway, 2=rail, 3=bus, 4=ferry, 5=cable, 6=gondola, 7=funicular, or extended types 100-1700"
-        ),
-      limit: z
-        .number()
-        .default(100)
-        .describe("Maximum number of routes to return (default 100)"),
-      offset: z
-        .number()
-        .default(0)
-        .describe("Pagination offset"),
+      title: "List routes",
+      description:
+        "List routes in a transit system. For large feeds (1000+ routes), filter with `query` (substring match on short/long name or route_id) or `route_type`. Returns `total` so the caller can tell when results are truncated.",
+      inputSchema: {
+        system: z.string().describe("System ID"),
+        query: z
+          .string()
+          .optional()
+          .describe(
+            "Substring match (case-insensitive) on short_name, long_name, or route_id"
+          ),
+        route_type: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe(
+            "Filter by GTFS route_type: 0=tram, 1=subway, 2=rail, 3=bus, 4=ferry, 5=cable, 6=gondola, 7=funicular, or extended types 100-1700"
+          ),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(1000)
+          .default(100)
+          .describe("Maximum number of routes to return (default 100, max 1000)"),
+        offset: z
+          .number()
+          .int()
+          .min(0)
+          .default(0)
+          .describe("Pagination offset"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+      },
     },
     async ({ system, query, route_type, limit, offset }) => {
       const config = resolveSystem(ctx.systems, system);
@@ -58,16 +75,26 @@ export function registerRouteTools(ctx: ToolContext): void {
     }
   );
 
-  ctx.server.tool(
+  ctx.server.registerTool(
     "get_route",
-    "Get a route and an ordered stop list. The stop list is drawn from the route's longest trip variant in the given direction; routes with branches may have service patterns that skip some stops — use get_trip for a specific trip's actual sequence. Pass route_id from list_routes; if only a human name is known, search with list_routes first.",
     {
-      system: z.string().describe("System ID"),
-      route_id: z.string().describe("Route ID, from list_routes"),
-      direction_id: z
-        .number()
-        .optional()
-        .describe("Agency-defined direction 0 or 1 (semantics vary — call without this to see both)"),
+      title: "Get route details",
+      description:
+        "Get a route and an ordered stop list. The stop list is drawn from the route's longest trip variant in the given direction; routes with branches may have service patterns that skip some stops — use get_trip for a specific trip's actual sequence. Pass route_id from list_routes; if only a human name is known, search with list_routes first.",
+      inputSchema: {
+        system: z.string().describe("System ID"),
+        route_id: z.string().describe("Route ID, from list_routes"),
+        direction_id: z
+          .union([z.literal(0), z.literal(1)])
+          .optional()
+          .describe(
+            "Agency-defined direction 0 or 1 (semantics vary — call without this to see both)"
+          ),
+      },
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+      },
     },
     async ({ system, route_id, direction_id }) => {
       const config = resolveSystem(ctx.systems, system);

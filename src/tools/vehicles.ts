@@ -15,12 +15,20 @@ import {
 } from "./helpers.js";
 
 export function registerVehicleTools(ctx: ToolContext): void {
-  ctx.server.tool(
+  ctx.server.registerTool(
     "get_vehicles",
-    "Get current vehicle positions (lat/lon, bearing, speed, current_status like 'in_transit_to' / 'stopped_at'). Filter by route_id to avoid large responses on busy systems.",
     {
-      system: z.string().describe("System ID"),
-      route_id: z.string().optional().describe("Filter by route ID"),
+      title: "Get vehicle positions",
+      description:
+        "Get current vehicle positions (lat/lon, bearing, speed, current_status like 'in_transit_to' / 'stopped_at'). Filter by route_id to avoid large responses on busy systems.",
+      inputSchema: {
+        system: z.string().describe("System ID"),
+        route_id: z.string().optional().describe("Filter by route ID"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: true,
+      },
     },
     async ({ system, route_id }) => {
       const config = resolveSystem(ctx.systems, system);

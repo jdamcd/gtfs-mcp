@@ -20,11 +20,19 @@ interface FeedStatus {
 }
 
 export function registerStatusTools(ctx: ToolContext): void {
-  ctx.server.tool(
+  ctx.server.registerTool(
     "get_system_status",
-    "Structured health overview for a transit system: static data counts, per-feed-type health (ok/failed URL counts, entity counts, oldest feed-header age, error messages), and a count of currently-active alerts.",
     {
-      system: z.string().describe("System ID"),
+      title: "Get system status",
+      description:
+        "Structured health overview for a transit system: static data counts, per-feed-type health (ok/failed URL counts, entity counts, oldest feed-header age, error messages), and a count of currently-active alerts.",
+      inputSchema: {
+        system: z.string().describe("System ID"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: true,
+      },
     },
     async ({ system }) => {
       const config = resolveSystem(ctx.systems, system);
