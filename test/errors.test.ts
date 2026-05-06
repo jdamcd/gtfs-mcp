@@ -81,7 +81,7 @@ describe("realtime fetch failures", () => {
       name: "get_alerts",
       arguments: { system: "test" },
     });
-    expect(getJsonContent(result)).toEqual([]);
+    expect(getJsonContent(result)).toMatchObject({ alerts: [] });
   });
 
   it("get_vehicles returns [] when vehicle_positions feed fails", async () => {
@@ -90,7 +90,7 @@ describe("realtime fetch failures", () => {
       name: "get_vehicles",
       arguments: { system: "test" },
     });
-    expect(getJsonContent(result)).toEqual([]);
+    expect(getJsonContent(result)).toMatchObject({ vehicles: [] });
   });
 
   it("get_system_status reports error per feed type and doesn't throw", async () => {
@@ -144,7 +144,7 @@ describe("malformed protobuf in realtime feeds", () => {
       name: "get_alerts",
       arguments: { system: "test" },
     });
-    expect(getJsonContent(result)).toEqual([]);
+    expect(getJsonContent(result)).toMatchObject({ alerts: [] });
   });
 });
 
@@ -192,7 +192,7 @@ describe("empty realtime config", () => {
       name: "get_alerts",
       arguments: { system: "test" },
     });
-    expect(getJsonContent(result)).toEqual([]);
+    expect(getJsonContent(result)).toMatchObject({ alerts: [] });
   });
 
   it("get_vehicles returns [] when no vehicle_positions are configured", async () => {
@@ -201,7 +201,7 @@ describe("empty realtime config", () => {
       name: "get_vehicles",
       arguments: { system: "test" },
     });
-    expect(getJsonContent(result)).toEqual([]);
+    expect(getJsonContent(result)).toMatchObject({ vehicles: [] });
   });
 
   it("get_system_status reports feeds as not configured when no URLs are set", async () => {

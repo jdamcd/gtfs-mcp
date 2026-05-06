@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { listRoutes, getRouteDetails } from "../gtfs/queries.js";
 import {
+  ListRoutesResponseSchema,
+  RouteDetailsResponseSchema,
+} from "../types.js";
+import {
   type ToolContext,
   resolveSystem,
   unknownSystemResponse,
@@ -46,6 +50,7 @@ export function registerRouteTools(ctx: ToolContext): void {
           .default(0)
           .describe("Pagination offset"),
       },
+      outputSchema: ListRoutesResponseSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
@@ -91,6 +96,7 @@ export function registerRouteTools(ctx: ToolContext): void {
             "Agency-defined direction 0 or 1 (semantics vary — call without this to see both)"
           ),
       },
+      outputSchema: RouteDetailsResponseSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,

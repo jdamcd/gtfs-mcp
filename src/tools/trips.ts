@@ -11,6 +11,7 @@ import {
   tripStatusFromRelationship,
 } from "../gtfs/rtHelpers.js";
 import { extractRtTime, formatLocalTime } from "../time.js";
+import { TripDetailsResponseSchema } from "../types.js";
 import {
   type ToolContext,
   resolveSystem,
@@ -31,6 +32,7 @@ export function registerTripTools(ctx: ToolContext): void {
         system: z.string().describe("System ID"),
         trip_id: z.string().describe("Trip ID, from get_arrivals"),
       },
+      outputSchema: TripDetailsResponseSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,

@@ -6,7 +6,7 @@ import {
 } from "../gtfs/enumNames.js";
 import { fetchAllFeeds } from "../gtfs/realtime.js";
 import { formatLocalTime } from "../time.js";
-import type { VehiclePosition } from "../types.js";
+import { VehiclesResponseSchema, type VehiclePosition } from "../types.js";
 import {
   type ToolContext,
   resolveSystem,
@@ -25,6 +25,7 @@ export function registerVehicleTools(ctx: ToolContext): void {
         system: z.string().describe("System ID"),
         route_id: z.string().optional().describe("Filter by route ID"),
       },
+      outputSchema: VehiclesResponseSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -67,7 +68,7 @@ export function registerVehicleTools(ctx: ToolContext): void {
         };
       });
 
-      return jsonResponse(vehicles);
+      return jsonResponse({ vehicles });
     }
   );
 }

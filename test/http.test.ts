@@ -109,8 +109,8 @@ describe("HTTP transport", () => {
       name: "list_systems",
       arguments: {},
     });
-    const systems = getJsonContent(result as any);
-    expect(systems).toEqual([{ id: "test", name: "Test Transit" }]);
+    const data = getJsonContent(result as any);
+    expect(data.systems).toEqual([{ id: "test", name: "Test Transit" }]);
   });
 
   it("searches stops", async () => {
@@ -118,7 +118,7 @@ describe("HTTP transport", () => {
       name: "search_stops",
       arguments: { system: "test", query: "Central" },
     });
-    const stops = getJsonContent(result as any) as any[];
+    const stops = getJsonContent(result as any).stops;
     expect(stops.length).toBeGreaterThanOrEqual(1);
     expect(stops[0]).toHaveProperty("stop_id");
     expect(stops[0]).toHaveProperty("name");
@@ -129,7 +129,7 @@ describe("HTTP transport", () => {
       name: "list_routes",
       arguments: { system: "test" },
     });
-    const data = getJsonContent(result as any) as any;
+    const data = getJsonContent(result as any);
     expect(data.routes.length).toBe(2);
     expect(data.total).toBe(2);
   });
@@ -139,7 +139,7 @@ describe("HTTP transport", () => {
       name: "get_arrivals",
       arguments: { system: "test", stop_id: "S2" },
     });
-    const response = getJsonContent(result as any) as any;
+    const response = getJsonContent(result as any);
     expect(response.arrivals.length).toBeGreaterThanOrEqual(1);
     expect(response.arrivals[0]).toHaveProperty("trip_id");
     expect(response.arrivals[0].is_realtime).toBe(true);
@@ -150,7 +150,7 @@ describe("HTTP transport", () => {
       name: "get_alerts",
       arguments: { system: "test" },
     });
-    const alerts = getJsonContent(result as any) as any[];
+    const alerts = getJsonContent(result as any).alerts;
     expect(alerts.length).toBe(1);
     expect(alerts[0].header).toBe("Delay on Route 1");
   });
@@ -160,7 +160,7 @@ describe("HTTP transport", () => {
       name: "get_vehicles",
       arguments: { system: "test" },
     });
-    const vehicles = getJsonContent(result as any) as any[];
+    const vehicles = getJsonContent(result as any).vehicles;
     expect(vehicles.length).toBe(1);
     expect(vehicles[0].vehicle_id).toBe("V1");
   });

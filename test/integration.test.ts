@@ -1,8 +1,21 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { setupTestDb, cleanupTestDb, createTestConfig, getTextContent, getJsonContent, encodeTripUpdateFeed, encodeAlertFeed, encodeVehiclePositionFeed } from "./helpers.js";
+import { setupTestDb, cleanupTestDb, createTestConfig, getTextContent, getJsonContent, getStructuredContent, encodeTripUpdateFeed, encodeAlertFeed, encodeVehiclePositionFeed } from "./helpers.js";
 import { formatLocalTime, GTFS_TIME_PATTERN } from "../src/time.js";
+import {
+  ListSystemsResponseSchema,
+  SearchStopsResponseSchema,
+  NearbyStopsResponseSchema,
+  StopDetailsResponseSchema,
+  ListRoutesResponseSchema,
+  RouteDetailsResponseSchema,
+  ArrivalsResponseSchema,
+  AlertsResponseSchema,
+  VehiclesResponseSchema,
+  TripDetailsResponseSchema,
+  SystemStatusResponseSchema,
+} from "../src/types.js";
 
 const AGENCY_TZ = "America/New_York";
 
@@ -137,8 +150,8 @@ function toLocalTimeString(unixSecs: number): string {
 describe("list_systems", () => {
   it("returns configured systems", async () => {
     const result = await client.callTool({ name: "list_systems", arguments: {} });
-    const systems = getJsonContent(result);
-    expect(systems).toEqual([{ id: "test", name: "Test Transit" }]);
+    const data = getJsonContent(result);
+    expect(data.systems).toEqual([{ id: "test", name: "Test Transit" }]);
   });
 });
 
@@ -148,7 +161,7 @@ describe("search_stops", () => {
       name: "search_stops",
       arguments: { system: "test", query: "Central" },
     });
-    const stops = getJsonContent(result);
+    const stops = getJsonContent(result).stops;
     expect(stops.length).toBeGreaterThanOrEqual(1);
     expect(stops[0]).toHaveProperty("stop_id");
     expect(stops[0]).toHaveProperty("name");
@@ -161,7 +174,7 @@ describe("search_stops", () => {
       name: "search_stops",
       arguments: { system: "test", query: "Central" },
     });
-    const ids = getJsonContent(result).map((s: any) => s.stop_id);
+    const ids = getJsonContent(result).stops.map((s: any) => s.stop_id);
     expect(ids).toContain("S1");
     expect(ids).not.toContain("S1N");
     expect(ids).not.toContain("S1S");
@@ -183,7 +196,7 @@ describe("find_nearby_stops", () => {
       name: "find_nearby_stops",
       arguments: { system: "test", lat: 40.7128, lon: -74.0060, radius_m: 2000 },
     });
-    const stops = getJsonContent(result);
+    const stops = getJsonContent(result).stops;
     const ids = stops.map((s: any) => s.stop_id);
     // S1 (parent) included; S1N and S1S (children) excluded
     expect(ids).toContain("S1");
@@ -200,7 +213,7 @@ describe("find_nearby_stops", () => {
       name: "find_nearby_stops",
       arguments: { system: "test", lat: 40.7128, lon: -74.0060, radius_m: 100 },
     });
-    const stops = getJsonContent(result);
+    const stops = getJsonContent(result).stops;
     const ids = stops.map((s: any) => s.stop_id);
     expect(ids).toContain("S1");
     expect(ids).not.toContain("S2");
@@ -211,7 +224,7 @@ describe("find_nearby_stops", () => {
       name: "find_nearby_stops",
       arguments: { system: "test", lat: 0, lon: 0, radius_m: 1000 },
     });
-    expect(getJsonContent(result)).toEqual([]);
+    expect(getJsonContent(result).stops).toEqual([]);
   });
 });
 
@@ -465,7 +478,7 @@ describe("get_alerts", () => {
       name: "get_alerts",
       arguments: { system: "test" },
     });
-    const alerts = getJsonContent(result);
+    const alerts = getJsonContent(result).alerts;
     expect(alerts.length).toBe(2);
     expect(alerts[0]).toHaveProperty("header");
     expect(alerts[0]).toHaveProperty("description");
@@ -477,7 +490,7 @@ describe("get_alerts", () => {
       name: "get_alerts",
       arguments: { system: "test", route_id: "R1" },
     });
-    const alerts = getJsonContent(result);
+    const alerts = getJsonContent(result).alerts;
     expect(alerts.length).toBe(1);
     expect(alerts[0].header).toBe("Delay on Route 1");
   });
@@ -487,7 +500,7 @@ describe("get_alerts", () => {
       name: "get_alerts",
       arguments: { system: "test", stop_id: "S3" },
     });
-    const alerts = getJsonContent(result);
+    const alerts = getJsonContent(result).alerts;
     expect(alerts.length).toBe(1);
     expect(alerts[0].header).toBe("Station closure");
   });
@@ -499,7 +512,7 @@ describe("get_vehicles", () => {
       name: "get_vehicles",
       arguments: { system: "test" },
     });
-    const vehicles = getJsonContent(result);
+    const vehicles = getJsonContent(result).vehicles;
     expect(vehicles.length).toBe(2);
     expect(vehicles[0]).toHaveProperty("vehicle_id");
     expect(vehicles[0]).toHaveProperty("latitude");
@@ -511,7 +524,7 @@ describe("get_vehicles", () => {
       name: "get_vehicles",
       arguments: { system: "test", route_id: "R1" },
     });
-    const vehicles = getJsonContent(result);
+    const vehicles = getJsonContent(result).vehicles;
     expect(vehicles.length).toBe(1);
     expect(vehicles[0].vehicle_id).toBe("V1");
   });
@@ -829,7 +842,7 @@ describe("get_alerts active_period filtering", () => {
         name: "get_alerts",
         arguments: { system: "test" },
       });
-      const ids = getJsonContent(result).map((a: any) => a.id);
+      const ids = getJsonContent(result).alerts.map((a: any) => a.id);
       expect(ids).toContain("always");
       expect(ids).toContain("current");
       expect(ids).not.toContain("future");
@@ -839,7 +852,9 @@ describe("get_alerts active_period filtering", () => {
         name: "get_alerts",
         arguments: { system: "test", include_inactive: true },
       });
-      const allIds = getJsonContent(withInactive).map((a: any) => a.id);
+      const allIds = getJsonContent(withInactive).alerts.map(
+        (a: any) => a.id
+      );
       expect(allIds).toContain("future");
       expect(allIds).toContain("past");
     } finally {
@@ -877,7 +892,7 @@ describe("get_alerts active_period filtering", () => {
         name: "get_alerts",
         arguments: { system: "test" },
       });
-      const alerts = getJsonContent(result);
+      const alerts = getJsonContent(result).alerts;
       expect(alerts.length).toBe(1);
       const ies = alerts[0].informed_entities;
       // Route-scoped entity should have null stop_id, not "".
@@ -889,5 +904,101 @@ describe("get_alerts active_period filtering", () => {
     } finally {
       clearFeedCache();
     }
+  });
+});
+
+describe("structured output", () => {
+  async function assertStructured(
+    name: string,
+    args: Record<string, unknown>,
+    schema: { safeParse: (v: unknown) => { success: boolean } }
+  ) {
+    const result = await client.callTool({ name, arguments: args });
+    const structured = getStructuredContent(result);
+    expect(structured).toBeDefined();
+    expect(structured).toEqual(getJsonContent(result));
+    const parsed = schema.safeParse(structured);
+    expect(parsed.success).toBe(true);
+  }
+
+  it("list_systems", () =>
+    assertStructured("list_systems", {}, ListSystemsResponseSchema));
+
+  it("search_stops", () =>
+    assertStructured(
+      "search_stops",
+      { system: "test", query: "Central" },
+      SearchStopsResponseSchema
+    ));
+
+  it("find_nearby_stops", () =>
+    assertStructured(
+      "find_nearby_stops",
+      { system: "test", lat: 40.7128, lon: -74.006, radius_m: 2000 },
+      NearbyStopsResponseSchema
+    ));
+
+  it("get_stop", () =>
+    assertStructured(
+      "get_stop",
+      { system: "test", stop_id: "S1" },
+      StopDetailsResponseSchema
+    ));
+
+  it("list_routes", () =>
+    assertStructured(
+      "list_routes",
+      { system: "test" },
+      ListRoutesResponseSchema
+    ));
+
+  it("get_route", () =>
+    assertStructured(
+      "get_route",
+      { system: "test", route_id: "R1", direction_id: 0 },
+      RouteDetailsResponseSchema
+    ));
+
+  it("get_arrivals", () =>
+    assertStructured(
+      "get_arrivals",
+      { system: "test", stop_id: "S2" },
+      ArrivalsResponseSchema
+    ));
+
+  it("get_alerts", () =>
+    assertStructured("get_alerts", { system: "test" }, AlertsResponseSchema));
+
+  it("get_vehicles", () =>
+    assertStructured(
+      "get_vehicles",
+      { system: "test" },
+      VehiclesResponseSchema
+    ));
+
+  it("get_trip", () =>
+    assertStructured(
+      "get_trip",
+      { system: "test", trip_id: "T1" },
+      TripDetailsResponseSchema
+    ));
+
+  it("get_system_status", () =>
+    assertStructured(
+      "get_system_status",
+      { system: "test" },
+      SystemStatusResponseSchema
+    ));
+
+  it("error responses omit structuredContent", async () => {
+    // Tools with declared outputSchema must not emit structuredContent on
+    // error — the SDK skips validation but a stray object would mislead
+    // schema-aware clients.
+    const result = await client.callTool({
+      name: "get_stop",
+      arguments: { system: "test", stop_id: "INVALID" },
+    });
+    expect((result as any).isError).toBe(true);
+    expect(getStructuredContent(result)).toBeUndefined();
   });
 });

@@ -23,7 +23,11 @@ import {
   previousGtfsDate,
   shiftGtfsTimeByDays,
 } from "../time.js";
-import type { Arrival, ArrivalsResponse } from "../types.js";
+import {
+  ArrivalsResponseSchema,
+  type Arrival,
+  type ArrivalsResponse,
+} from "../types.js";
 import {
   type ToolContext,
   resolveSystem,
@@ -55,6 +59,7 @@ export function registerArrivalTools(ctx: ToolContext): void {
           .default(10)
           .describe("Maximum number of arrivals to return"),
       },
+      outputSchema: ArrivalsResponseSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,

@@ -3,7 +3,12 @@ import { alertCauseName, alertEffectName } from "../gtfs/enumNames.js";
 import { fetchAllFeeds } from "../gtfs/realtime.js";
 import { isAlertActiveAt } from "../gtfs/rtHelpers.js";
 import { formatLocalDateTime } from "../time.js";
-import type { Alert, ActivePeriod, InformedEntity } from "../types.js";
+import {
+  AlertsResponseSchema,
+  type Alert,
+  type ActivePeriod,
+  type InformedEntity,
+} from "../types.js";
 import {
   type ToolContext,
   resolveSystem,
@@ -44,6 +49,7 @@ export function registerAlertTools(ctx: ToolContext): void {
             "Include alerts whose active_period does not cover the current time"
           ),
       },
+      outputSchema: AlertsResponseSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -109,7 +115,7 @@ export function registerAlertTools(ctx: ToolContext): void {
         };
       });
 
-      return jsonResponse(alerts);
+      return jsonResponse({ alerts });
     }
   );
 }

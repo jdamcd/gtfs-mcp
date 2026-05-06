@@ -9,6 +9,7 @@ import { registerTripTools } from "./tools/trips.js";
 import { registerStatusTools } from "./tools/status.js";
 import { jsonResponse } from "./tools/helpers.js";
 import type { ToolContext } from "./tools/helpers.js";
+import { ListSystemsResponseSchema } from "./types.js";
 
 export function createServer(config: AppConfig): McpServer {
   const server = new McpServer(
@@ -41,13 +42,16 @@ export function createServer(config: AppConfig): McpServer {
       title: "List transit systems",
       description:
         "List configured transit systems and their IDs. Call this first when the user hasn't specified a system, or to discover valid `system` values for other tools.",
+      outputSchema: ListSystemsResponseSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
       },
     },
     async () =>
-      jsonResponse(config.systems.map((s) => ({ id: s.id, name: s.name })))
+      jsonResponse({
+        systems: config.systems.map((s) => ({ id: s.id, name: s.name })),
+      })
   );
 
   // Register all tool groups

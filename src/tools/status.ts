@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { fetchAllFeedsDetailed } from "../gtfs/realtime.js";
 import { isAlertActiveAt } from "../gtfs/rtHelpers.js";
+import { SystemStatusResponseSchema } from "../types.js";
 import {
   type ToolContext,
   resolveSystem,
@@ -29,6 +30,7 @@ export function registerStatusTools(ctx: ToolContext): void {
       inputSchema: {
         system: z.string().describe("System ID"),
       },
+      outputSchema: SystemStatusResponseSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,

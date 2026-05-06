@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { searchStops, getStopDetails, findStopsNearby } from "../gtfs/queries.js";
 import {
+  SearchStopsResponseSchema,
+  NearbyStopsResponseSchema,
+  StopDetailsResponseSchema,
+} from "../types.js";
+import {
   type ToolContext,
   resolveSystem,
   unknownSystemResponse,
@@ -27,6 +32,7 @@ export function registerStopTools(ctx: ToolContext): void {
           .default(10)
           .describe("Maximum number of results"),
       },
+      outputSchema: SearchStopsResponseSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
@@ -39,14 +45,14 @@ export function registerStopTools(ctx: ToolContext): void {
       const db = await getReadyDb(config, ctx.dataDir, ctx.refreshHours);
       const stops = searchStops(db, query, limit);
 
-      return jsonResponse(
-        stops.map((s) => ({
+      return jsonResponse({
+        stops: stops.map((s) => ({
           stop_id: s.stop_id,
           name: s.stop_name,
           lat: s.stop_lat,
           lon: s.stop_lon,
-        }))
-      );
+        })),
+      });
     }
   );
 
@@ -82,6 +88,7 @@ export function registerStopTools(ctx: ToolContext): void {
           .default(10)
           .describe("Maximum number of results"),
       },
+      outputSchema: NearbyStopsResponseSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
@@ -94,15 +101,15 @@ export function registerStopTools(ctx: ToolContext): void {
       const db = await getReadyDb(config, ctx.dataDir, ctx.refreshHours);
       const stops = findStopsNearby(db, lat, lon, radius_m, limit);
 
-      return jsonResponse(
-        stops.map((s) => ({
+      return jsonResponse({
+        stops: stops.map((s) => ({
           stop_id: s.stop_id,
           name: s.stop_name,
           lat: s.stop_lat,
           lon: s.stop_lon,
           distance_m: s.distance_m,
-        }))
-      );
+        })),
+      });
     }
   );
 
@@ -118,6 +125,7 @@ export function registerStopTools(ctx: ToolContext): void {
           .string()
           .describe("Stop ID from search_stops / find_nearby_stops / get_route"),
       },
+      outputSchema: StopDetailsResponseSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,

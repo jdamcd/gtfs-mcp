@@ -36,8 +36,14 @@ export function getTextContent(result: { content: Array<{ text: string }> }): st
   return result.content[0].text;
 }
 
-export function getJsonContent(result: { content: Array<{ text: string }> }): unknown {
+export function getJsonContent(result: { content: Array<{ text: string }> }): any {
   return JSON.parse(getTextContent(result));
+}
+
+export function getStructuredContent(result: {
+  structuredContent?: unknown;
+}): unknown {
+  return result.structuredContent;
 }
 
 export async function setupTestDb(): Promise<{ db: ReturnType<typeof openDb>; dir: string }> {

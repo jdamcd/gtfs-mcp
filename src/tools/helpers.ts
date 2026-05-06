@@ -9,9 +9,10 @@ export interface ToolContext {
   refreshHours: number;
 }
 
-export function jsonResponse(data: unknown) {
+export function jsonResponse<T extends Record<string, unknown>>(data: T) {
   return {
     content: [{ type: "text" as const, text: JSON.stringify(data) }],
+    structuredContent: data,
   };
 }
 
