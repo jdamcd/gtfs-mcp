@@ -41,7 +41,9 @@ export function unknownSystemResponse(
   systems: Map<string, SystemConfig>
 ) {
   const available = Array.from(systems.keys()).sort().join(", ") || "none";
-  return errorResponse(`Unknown system: ${id}. Available: ${available}.`);
+  return errorResponse(
+    `Unknown system: ${id}. Use list_systems to discover valid system IDs. Available: ${available}.`
+  );
 }
 
 export async function getReadyDb(

@@ -46,7 +46,7 @@ export function registerArrivalTools(ctx: ToolContext): void {
       description:
         "Get upcoming arrivals at a stop. Accepts a parent station ID and resolves to all child platforms. Merges realtime data (authoritative within its horizon) with scheduled times (fills beyond). Cancelled trips and skipped stops are excluded; includes services that roll past midnight via yesterday's 24h+ stop_times. Returns data_source indicating which inputs contributed.",
       inputSchema: {
-        system: z.string().describe("System ID"),
+        system: z.string().describe("System ID, from list_systems"),
         stop_id: z
           .string()
           .describe("Stop ID (parent station IDs are resolved to child platforms)"),

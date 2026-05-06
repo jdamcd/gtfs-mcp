@@ -22,7 +22,7 @@ export function registerVehicleTools(ctx: ToolContext): void {
       description:
         "Get current vehicle positions (lat/lon, bearing, speed, current_status like 'in_transit_to' / 'stopped_at'). Filter by route_id to avoid large responses on busy systems.",
       inputSchema: {
-        system: z.string().describe("System ID"),
+        system: z.string().describe("System ID, from list_systems"),
         route_id: z.string().optional().describe("Filter by route ID"),
       },
       outputSchema: VehiclesResponseSchema,

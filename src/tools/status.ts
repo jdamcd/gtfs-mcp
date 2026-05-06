@@ -28,7 +28,7 @@ export function registerStatusTools(ctx: ToolContext): void {
       description:
         "Structured health overview for a transit system: static data counts, per-feed-type health (ok/failed URL counts, entity counts, oldest feed-header age, error messages), and a count of currently-active alerts.",
       inputSchema: {
-        system: z.string().describe("System ID"),
+        system: z.string().describe("System ID, from list_systems"),
       },
       outputSchema: SystemStatusResponseSchema,
       annotations: {

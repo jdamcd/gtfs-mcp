@@ -39,7 +39,7 @@ export function registerAlertTools(ctx: ToolContext): void {
       description:
         "Get service alerts for a transit system. By default returns only alerts active right now (per GTFS-RT active_period semantics); set include_inactive=true to include planned/future/expired alerts.",
       inputSchema: {
-        system: z.string().describe("System ID"),
+        system: z.string().describe("System ID, from list_systems"),
         route_id: z.string().optional().describe("Filter by route ID"),
         stop_id: z.string().optional().describe("Filter by stop ID"),
         include_inactive: z

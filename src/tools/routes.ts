@@ -21,7 +21,7 @@ export function registerRouteTools(ctx: ToolContext): void {
       description:
         "List routes in a transit system. For large feeds (1000+ routes), filter with `query` (substring match on short/long name or route_id) or `route_type`. Returns `total` so the caller can tell when results are truncated.",
       inputSchema: {
-        system: z.string().describe("System ID"),
+        system: z.string().describe("System ID, from list_systems"),
         query: z
           .string()
           .optional()
@@ -87,7 +87,7 @@ export function registerRouteTools(ctx: ToolContext): void {
       description:
         "Get a route and an ordered stop list. The stop list is drawn from the route's longest trip variant in the given direction; routes with branches may have service patterns that skip some stops — use get_trip for a specific trip's actual sequence. Pass route_id from list_routes; if only a human name is known, search with list_routes first.",
       inputSchema: {
-        system: z.string().describe("System ID"),
+        system: z.string().describe("System ID, from list_systems"),
         route_id: z.string().describe("Route ID, from list_routes"),
         direction_id: z
           .union([z.literal(0), z.literal(1)])

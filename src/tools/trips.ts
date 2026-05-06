@@ -29,7 +29,7 @@ export function registerTripTools(ctx: ToolContext): void {
       description:
         "Get a trip's stop sequence with realtime delay/status per stop. Returns top-level `trip.status` (scheduled/canceled/added) and per-stop `status` (scheduled/skipped/no_data). For agencies like MTA whose realtime trip_ids are synthetic, returns a realtime-only synthesis when the trip_id isn't in the static schedule. Use trip_ids returned by get_arrivals; they are short-lived.",
       inputSchema: {
-        system: z.string().describe("System ID"),
+        system: z.string().describe("System ID, from list_systems"),
         trip_id: z.string().describe("Trip ID, from get_arrivals"),
       },
       outputSchema: TripDetailsResponseSchema,
