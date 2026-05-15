@@ -116,6 +116,22 @@ Set `auth` to `null` for systems that don't require authentication.
 
 The `system` parameter is the system ID from your config (e.g. `"mta-subway"`). IDs flow between tools — e.g. `search_stops` returns a `stop_id` that `get_arrivals` consumes.
 
+## Resources
+
+| URI | Description |
+|-----|-------------|
+| `gtfs://systems` | Markdown overview of every configured system: id, name, timezone, and how many realtime feed URLs are wired up per feed type. |
+
+Clients that support resources (Claude Desktop, MCP Inspector) can attach this as context — handy for grounding a conversation in which systems the server actually knows about, without invoking `list_systems`.
+
+## Prompts
+
+| Name | Description | Arguments |
+|------|-------------|-----------|
+| `transit-status` | Summary of currently-active alerts across configured systems. In Claude Desktop this appears in the attachment ("+") menu. | `system?` — optional system ID to scope to one system. |
+
+The prompt returns a steering message that instructs the model to call `get_alerts` for the relevant system(s) and produce a tight summary. The model still does the work via tool calls — the prompt is just the framing.
+
 ## Development
 
 ```bash

@@ -7,6 +7,8 @@ import { registerAlertTools } from "./tools/alerts.js";
 import { registerVehicleTools } from "./tools/vehicles.js";
 import { registerTripTools } from "./tools/trips.js";
 import { registerStatusTools } from "./tools/status.js";
+import { registerSystemsResource } from "./resources/systems.js";
+import { registerTransitStatusPrompt } from "./prompts/transitStatus.js";
 import { jsonResponse } from "./tools/helpers.js";
 import type { ToolContext } from "./tools/helpers.js";
 import { ListSystemsResponseSchema } from "./types.js";
@@ -62,6 +64,9 @@ export function createServer(config: AppConfig): McpServer {
   registerVehicleTools(ctx);
   registerTripTools(ctx);
   registerStatusTools(ctx);
+
+  registerSystemsResource(ctx);
+  registerTransitStatusPrompt(ctx);
 
   return server;
 }

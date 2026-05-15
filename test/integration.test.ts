@@ -1002,3 +1002,71 @@ describe("structured output", () => {
     expect(getStructuredContent(result)).toBeUndefined();
   });
 });
+
+describe("resources", () => {
+  it("lists the systems resource", async () => {
+    const result = await client.listResources();
+    const uris = result.resources.map((r) => r.uri);
+    expect(uris).toContain("gtfs://systems");
+  });
+
+  it("reads gtfs://systems with configured system details", async () => {
+    const result = await client.readResource({ uri: "gtfs://systems" });
+    expect(result.contents).toHaveLength(1);
+    const entry = result.contents[0];
+    expect(entry.uri).toBe("gtfs://systems");
+    expect(entry.mimeType).toBe("text/markdown");
+    const text = entry.text as string;
+    expect(text).toContain("# Configured transit systems");
+    expect(text).toContain("## test — Test Transit");
+    expect(text).toContain("America/New_York");
+    expect(text).toContain("1 trip-updates");
+    expect(text).toContain("1 vehicle-positions");
+    expect(text).toContain("1 alerts");
+  });
+});
+
+describe("prompts", () => {
+  const textOf = (msg: { content: unknown }): string =>
+    (msg.content as { type: "text"; text: string }).text;
+
+  it("lists the transit-status prompt", async () => {
+    const result = await client.listPrompts();
+    const names = result.prompts.map((p) => p.name);
+    expect(names).toContain("transit-status");
+  });
+
+  it("returns a steering message that references the configured system and required tools", async () => {
+    const result = await client.getPrompt({
+      name: "transit-status",
+      arguments: {},
+    });
+    expect(result.messages).toHaveLength(1);
+    const msg = result.messages[0];
+    expect(msg.role).toBe("user");
+    const text = textOf(msg);
+    expect(text).toContain("- test");
+    expect(text).toContain("get_alerts");
+  });
+
+  it("scopes the prompt to a single system when the system arg is provided", async () => {
+    const result = await client.getPrompt({
+      name: "transit-status",
+      arguments: { system: "test" },
+    });
+    const text = textOf(result.messages[0]);
+    expect(text).toContain("the test system");
+    expect(text).toContain("- test");
+  });
+
+  it("flags an unknown system in the steering message", async () => {
+    const result = await client.getPrompt({
+      name: "transit-status",
+      arguments: { system: "nope" },
+    });
+    const text = textOf(result.messages[0]);
+    expect(text).toContain("Unknown system: nope");
+    expect(text).toContain("list_systems");
+    expect(text).toContain("Available: test");
+  });
+});
