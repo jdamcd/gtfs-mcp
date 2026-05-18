@@ -1,13 +1,11 @@
 import { z } from "zod";
 import { fetchAllFeedsDetailed } from "../gtfs/realtime.js";
-import { isAlertActiveAt } from "../gtfs/rtHelpers.js";
-import { SystemStatusResponseSchema } from "../types.js";
+import { FeedHealthResponseSchema } from "../types.js";
 import {
   type ToolContext,
   resolveSystem,
   unknownSystemResponse,
   jsonResponse,
-  getReadyDb,
 } from "./helpers.js";
 
 interface FeedStatus {
@@ -20,17 +18,17 @@ interface FeedStatus {
   errors: string[];
 }
 
-export function registerStatusTools(ctx: ToolContext): void {
+export function registerFeedHealthTools(ctx: ToolContext): void {
   ctx.server.registerTool(
-    "get_system_status",
+    "get_feed_health",
     {
-      title: "Get system status",
+      title: "Get realtime feed health",
       description:
-        "Structured health overview for a transit system: static data counts, per-feed-type health (ok/failed URL counts, entity counts, oldest feed-header age, error messages), and a count of currently-active alerts.",
+        "Diagnostics for a transit system's GTFS-RT feeds: per-feed-type URL counts (ok/failed), entity counts, oldest feed-header age, and fetch error messages. Use this to check whether realtime data is reachable and fresh.",
       inputSchema: {
         system: z.string().describe("System ID, from list_systems"),
       },
-      outputSchema: SystemStatusResponseSchema,
+      outputSchema: FeedHealthResponseSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -40,22 +38,10 @@ export function registerStatusTools(ctx: ToolContext): void {
       const config = resolveSystem(ctx.systems, system);
       if (!config) return unknownSystemResponse(system, ctx.systems);
 
-      const db = await getReadyDb(config, ctx.dataDir, ctx.refreshHours);
-
-      const routeCount =
-        db.prepare("SELECT COUNT(*) as count FROM routes").get() as {
-          count: number;
-        };
-      const stopCount =
-        db.prepare("SELECT COUNT(*) as count FROM stops").get() as {
-          count: number;
-        };
-
       const nowSecs = Math.floor(Date.now() / 1000);
       const feedTypes = ["trip_updates", "vehicle_positions", "alerts"] as const;
 
       const feedStatusByType = {} as Record<(typeof feedTypes)[number], FeedStatus>;
-      let activeAlertCount = 0;
 
       await Promise.all(
         feedTypes.map(async (feedType) => {
@@ -91,22 +77,10 @@ export function registerStatusTools(ctx: ToolContext): void {
               oldestTs !== null ? nowSecs - oldestTs : null,
             errors: failed.map((r) => r.error!).filter(Boolean),
           };
-
-          if (feedType === "alerts") {
-            activeAlertCount = results
-              .flatMap((r) => r.entities)
-              .filter((e) => e.alert && isAlertActiveAt(e.alert, nowSecs))
-              .length;
-          }
         })
       );
 
       return jsonResponse({
-        system_id: config.id,
-        system_name: config.name,
-        route_count: routeCount.count,
-        stop_count: stopCount.count,
-        active_alerts: activeAlertCount,
         feeds: feedStatusByType,
       });
     }

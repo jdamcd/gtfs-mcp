@@ -158,12 +158,7 @@ export const TripDetailsResponseSchema = z.object({
   stop_times: z.array(TripStopTimeSchema),
 });
 
-export const SystemStatusResponseSchema = z.object({
-  system_id: z.string(),
-  system_name: z.string(),
-  route_count: z.number(),
-  stop_count: z.number(),
-  active_alerts: z.number(),
+export const FeedHealthResponseSchema = z.object({
   feeds: z.object({
     trip_updates: FeedStatusSchema,
     vehicle_positions: FeedStatusSchema,

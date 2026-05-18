@@ -111,12 +111,12 @@ tests:
       - type: javascript
         value: "output.includes('\"name\":\"get_trip\"') && output.includes('\"trip_id\"') && output.includes('075850_1..N03R')"
 
-  - description: "Status: system overview"
+  - description: "Feed health diagnostics"
     vars:
-      query: "Give me a status overview of the mta-subway system"
+      query: "Are the realtime feeds healthy for mta-subway? Any fetch errors?"
     assert:
       - type: javascript
-        value: "output.includes('\"name\":\"get_system_status\"')"
+        value: "output.includes('\"name\":\"get_feed_health\"')"
 
   # --- Multi-tool ---
 

@@ -14,7 +14,7 @@ import {
   AlertsResponseSchema,
   VehiclesResponseSchema,
   TripDetailsResponseSchema,
-  SystemStatusResponseSchema,
+  FeedHealthResponseSchema,
 } from "../src/types.js";
 
 const AGENCY_TZ = "America/New_York";
@@ -582,18 +582,13 @@ describe("get_trip", () => {
   });
 });
 
-describe("get_system_status", () => {
-  it("returns system overview", async () => {
+describe("get_feed_health", () => {
+  it("returns per-feed-type diagnostics", async () => {
     const result = await client.callTool({
-      name: "get_system_status",
+      name: "get_feed_health",
       arguments: { system: "test" },
     });
     const data = getJsonContent(result);
-    expect(data.system_id).toBe("test");
-    expect(data.system_name).toBe("Test Transit");
-    expect(data.route_count).toBe(2);
-    expect(data.stop_count).toBe(5);
-    expect(data.active_alerts).toBe(2);
     expect(data.feeds.trip_updates.configured).toBe(true);
     expect(data.feeds.trip_updates.urls_ok).toBe(1);
     expect(data.feeds.trip_updates.entities).toBeGreaterThan(0);
@@ -983,11 +978,11 @@ describe("structured output", () => {
       TripDetailsResponseSchema
     ));
 
-  it("get_system_status", () =>
+  it("get_feed_health", () =>
     assertStructured(
-      "get_system_status",
+      "get_feed_health",
       { system: "test" },
-      SystemStatusResponseSchema
+      FeedHealthResponseSchema
     ));
 
   it("error responses omit structuredContent", async () => {

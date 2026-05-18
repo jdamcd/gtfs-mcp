@@ -112,7 +112,7 @@ Set `auth` to `null` for systems that don't require authentication.
 | `get_alerts` | Active service alerts | `system`, `route_id?`, `stop_id?` |
 | `get_vehicles` | Live vehicle positions | `system`, `route_id?` |
 | `get_trip` | Trip stop sequence with realtime delays | `system`, `trip_id` |
-| `get_system_status` | System overview: counts, alerts, feed health | `system` |
+| `get_feed_health` | Realtime feed diagnostics: per-URL fetch results, entity counts, oldest header age | `system` |
 
 The `system` parameter is the system ID from your config (e.g. `"mta-subway"`). IDs flow between tools — e.g. `search_stops` returns a `stop_id` that `get_arrivals` consumes.
 

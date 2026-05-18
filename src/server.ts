@@ -6,7 +6,7 @@ import { registerArrivalTools } from "./tools/arrivals.js";
 import { registerAlertTools } from "./tools/alerts.js";
 import { registerVehicleTools } from "./tools/vehicles.js";
 import { registerTripTools } from "./tools/trips.js";
-import { registerStatusTools } from "./tools/status.js";
+import { registerFeedHealthTools } from "./tools/feedHealth.js";
 import { registerSystemsResource } from "./resources/systems.js";
 import { registerTransitStatusPrompt } from "./prompts/transitStatus.js";
 import { jsonResponse } from "./tools/helpers.js";
@@ -63,7 +63,7 @@ export function createServer(config: AppConfig): McpServer {
   registerAlertTools(ctx);
   registerVehicleTools(ctx);
   registerTripTools(ctx);
-  registerStatusTools(ctx);
+  registerFeedHealthTools(ctx);
 
   registerSystemsResource(ctx);
   registerTransitStatusPrompt(ctx);

@@ -93,16 +93,13 @@ describe("realtime fetch failures", () => {
     expect(getJsonContent(result)).toMatchObject({ vehicles: [] });
   });
 
-  it("get_system_status reports error per feed type and doesn't throw", async () => {
+  it("get_feed_health reports error per feed type and doesn't throw", async () => {
     const client = await makeClient(createTestConfig());
     const result = await client.callTool({
-      name: "get_system_status",
+      name: "get_feed_health",
       arguments: { system: "test" },
     });
     const data = getJsonContent(result) as any;
-
-    expect(data.route_count).toBeGreaterThan(0);
-    expect(data.active_alerts).toBe(0);
 
     for (const feed of Object.values(data.feeds) as any[]) {
       expect(feed.configured).toBe(true);
@@ -204,10 +201,10 @@ describe("empty realtime config", () => {
     expect(getJsonContent(result)).toMatchObject({ vehicles: [] });
   });
 
-  it("get_system_status reports feeds as not configured when no URLs are set", async () => {
+  it("get_feed_health reports feeds as not configured when no URLs are set", async () => {
     const client = await makeClient(emptyRealtimeConfig);
     const result = await client.callTool({
-      name: "get_system_status",
+      name: "get_feed_health",
       arguments: { system: "test" },
     });
     const data = getJsonContent(result) as any;

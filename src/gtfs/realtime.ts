@@ -99,7 +99,7 @@ export async function fetchFeed(
 /**
  * Fetch all feeds concurrently, returning per-URL outcomes. Callers that
  * only want entities can flatMap `.entities`; callers that need operational
- * visibility (get_system_status) can inspect `.ok` / `.error` per feed.
+ * visibility (get_feed_health) can inspect `.ok` / `.error` per feed.
  */
 export async function fetchAllFeedsDetailed(
   urls: string[],
