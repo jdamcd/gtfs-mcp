@@ -17,6 +17,22 @@ import { createServer } from "./server.js";
 export function createHttpMcpServer(config: AppConfig): Server {
   const sessions = new Map<string, StreamableHTTPServerTransport>();
 
+  function resolveSession(
+    sessionId: string | undefined,
+    res: ServerResponse,
+  ): StreamableHTTPServerTransport | null {
+    if (!sessionId) {
+      res.writeHead(400).end("Bad Request: missing session ID");
+      return null;
+    }
+    const transport = sessions.get(sessionId);
+    if (!transport) {
+      res.writeHead(404).end("Not Found: unknown session ID");
+      return null;
+    }
+    return transport;
+  }
+
   return createHttpServer(async (req: IncomingMessage, res: ServerResponse) => {
     if (req.method === "POST") {
       const chunks: Buffer[] = [];
@@ -66,19 +82,14 @@ export function createHttpMcpServer(config: AppConfig): Server {
         return;
       }
 
-      if (!sessionId || !sessions.has(sessionId)) {
-        res.writeHead(400).end("Bad Request: missing or invalid session ID");
-        return;
-      }
-
-      await sessions.get(sessionId)!.handleRequest(req, res, body);
+      const transport = resolveSession(sessionId, res);
+      if (!transport) return;
+      await transport.handleRequest(req, res, body);
     } else if (req.method === "GET" || req.method === "DELETE") {
       const sessionId = req.headers["mcp-session-id"] as string | undefined;
-      if (!sessionId || !sessions.has(sessionId)) {
-        res.writeHead(400).end("Bad Request: missing or invalid session ID");
-        return;
-      }
-      await sessions.get(sessionId)!.handleRequest(req, res);
+      const transport = resolveSession(sessionId, res);
+      if (!transport) return;
+      await transport.handleRequest(req, res);
     } else {
       res.writeHead(405).end("Method Not Allowed");
     }

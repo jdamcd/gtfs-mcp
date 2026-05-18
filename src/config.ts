@@ -11,9 +11,9 @@ export const AuthConfigSchema = z.object({
 });
 
 export const RealtimeConfigSchema = z.object({
-  trip_updates: z.array(z.string()),
-  vehicle_positions: z.array(z.string()),
-  alerts: z.array(z.string()),
+  trip_updates: z.array(z.string().url()),
+  vehicle_positions: z.array(z.string().url()),
+  alerts: z.array(z.string().url()),
 });
 
 const TimezoneSchema = z.string().refine(
@@ -39,7 +39,7 @@ export const SystemConfigSchema = z.object({
       "system id must be alphanumeric with underscores or hyphens"
     ),
   name: z.string(),
-  schedule_url: z.string(),
+  schedule_url: z.string().url(),
   timezone: TimezoneSchema,
   realtime: RealtimeConfigSchema,
   auth: AuthConfigSchema.nullable(),

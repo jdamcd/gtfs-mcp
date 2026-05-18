@@ -1,3 +1,4 @@
+import type { transit_realtime as TransitRealtime } from "gtfs-realtime-bindings";
 import { z } from "zod";
 import { alertCauseName, alertEffectName } from "../gtfs/enumNames.js";
 import { fetchAllFeeds } from "../gtfs/realtime.js";
@@ -16,12 +17,13 @@ import {
   jsonResponse,
 } from "./helpers.js";
 
-function getTranslatedText(translatedString: any): string {
-  if (!translatedString?.translation?.length) return "";
-  const en = translatedString.translation.find(
-    (t: any) => t.language === "en" || !t.language
-  );
-  return en?.text ?? translatedString.translation[0]?.text ?? "";
+function getTranslatedText(
+  translatedString: TransitRealtime.ITranslatedString | null | undefined
+): string {
+  const translations = translatedString?.translation ?? [];
+  if (translations.length === 0) return "";
+  const en = translations.find((t) => t.language === "en" || !t.language);
+  return en?.text ?? translations[0]?.text ?? "";
 }
 
 // proto3 decodes unset string fields as "" rather than undefined, so a
@@ -74,10 +76,10 @@ export function registerAlertTools(ctx: ToolContext): void {
         }
 
         const informed = e.alert.informedEntity ?? [];
-        if (route_id && !informed.some((ie: any) => ie.routeId === route_id)) {
+        if (route_id && !informed.some((ie) => ie.routeId === route_id)) {
           return false;
         }
-        if (stop_id && !informed.some((ie: any) => ie.stopId === stop_id)) {
+        if (stop_id && !informed.some((ie) => ie.stopId === stop_id)) {
           return false;
         }
         return true;
@@ -87,14 +89,14 @@ export function registerAlertTools(ctx: ToolContext): void {
         const a = e.alert!;
         const informedEntities: InformedEntity[] = (
           a.informedEntity ?? []
-        ).map((ie: any) => ({
+        ).map((ie) => ({
           route_id: nullIfEmpty(ie.routeId),
           stop_id: nullIfEmpty(ie.stopId),
           trip_id: nullIfEmpty(ie.trip?.tripId),
         }));
 
         const activePeriods: ActivePeriod[] = (a.activePeriod ?? []).map(
-          (ap: any) => ({
+          (ap) => ({
             start: ap.start
               ? formatLocalDateTime(new Date(Number(ap.start) * 1000), config.timezone)
               : null,

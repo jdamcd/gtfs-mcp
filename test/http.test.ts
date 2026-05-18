@@ -28,6 +28,7 @@ const testConfig = createTestConfig();
 let client: Client;
 let httpServer: Server;
 let dbDir: string;
+let port: number;
 
 beforeAll(async () => {
   const result = await setupTestDb();
@@ -85,7 +86,7 @@ beforeAll(async () => {
     httpServer.listen(0, () => resolve());
   });
   const addr = httpServer.address();
-  const port = typeof addr === "object" && addr ? addr.port : 0;
+  port = typeof addr === "object" && addr ? addr.port : 0;
 
   const transport = new StreamableHTTPClientTransport(
     new URL(`http://localhost:${port}/mcp`),
@@ -171,5 +172,30 @@ describe("HTTP transport", () => {
       arguments: { system: "nonexistent", query: "test" },
     });
     expect(getTextContent(result as any)).toContain("Unknown system");
+  });
+
+  describe("session error responses", () => {
+    const rpcBody = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/list",
+      params: {},
+    });
+    const postHeaders = {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    };
+    const unknownSession = { "mcp-session-id": "does-not-exist" };
+
+    it.each([
+      { name: "POST without session header", method: "POST", headers: postHeaders, body: rpcBody, status: 400 },
+      { name: "POST with unknown session", method: "POST", headers: { ...postHeaders, ...unknownSession }, body: rpcBody, status: 404 },
+      { name: "GET without session header", method: "GET", headers: undefined, body: undefined, status: 400 },
+      { name: "GET with unknown session", method: "GET", headers: unknownSession, body: undefined, status: 404 },
+      { name: "DELETE with unknown session", method: "DELETE", headers: unknownSession, body: undefined, status: 404 },
+    ])("$name → $status", async ({ method, headers, body, status }) => {
+      const res = await fetch(`http://localhost:${port}/mcp`, { method, headers, body });
+      expect(res.status).toBe(status);
+    });
   });
 });

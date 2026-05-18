@@ -102,6 +102,44 @@ describe("AppConfigSchema", () => {
     expect(config.systems[0].auth?.type).toBe("query_param");
   });
 
+  it("rejects a non-URL schedule_url", () => {
+    expect(() =>
+      AppConfigSchema.parse({
+        systems: [
+          {
+            id: "test",
+            name: "Test",
+            schedule_url: "not-a-url",
+            timezone: "America/New_York",
+            realtime: { trip_updates: [], vehicle_positions: [], alerts: [] },
+            auth: null,
+          },
+        ],
+      })
+    ).toThrow();
+  });
+
+  it("rejects a non-URL realtime feed entry", () => {
+    expect(() =>
+      AppConfigSchema.parse({
+        systems: [
+          {
+            id: "test",
+            name: "Test",
+            schedule_url: "http://example.com/gtfs.zip",
+            timezone: "America/New_York",
+            realtime: {
+              trip_updates: ["http://example.com/tu", "not-a-url"],
+              vehicle_positions: [],
+              alerts: [],
+            },
+            auth: null,
+          },
+        ],
+      })
+    ).toThrow();
+  });
+
   it("rejects invalid auth type", () => {
     expect(() =>
       AppConfigSchema.parse({
