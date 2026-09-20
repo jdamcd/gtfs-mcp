@@ -36,6 +36,7 @@ let dbDir: string;
 let s1nArrivalSecs: number;
 let s2ArrivalSecs: number;
 let s3ArrivalSecs: number;
+let defaultFetch: (url: unknown) => Promise<Response>;
 
 beforeAll(async () => {
   const result = await setupTestDb();
@@ -113,7 +114,7 @@ beforeAll(async () => {
     },
   ]);
 
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+  defaultFetch = async (url) => {
     const urlStr = String(url);
     let body: Uint8Array;
     if (urlStr.includes("trip-updates")) {
@@ -126,7 +127,8 @@ beforeAll(async () => {
       return new Response("Not Found", { status: 404 });
     }
     return new Response(body, { status: 200 });
-  });
+  };
+  vi.spyOn(globalThis, "fetch").mockImplementation(defaultFetch);
 
   const server = createServer(testConfig);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -953,6 +955,13 @@ describe("get_alerts active_period filtering", () => {
 });
 
 describe("structured output", () => {
+  // Other tests in this file replace the fetch mock without restoring it.
+  beforeAll(async () => {
+    const { clearFeedCache } = await import("../src/gtfs/realtime.js");
+    clearFeedCache();
+    vi.spyOn(globalThis, "fetch").mockImplementation(defaultFetch);
+  });
+
   async function assertStructured(
     name: string,
     args: Record<string, unknown>,

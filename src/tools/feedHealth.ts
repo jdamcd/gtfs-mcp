@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { fetchAllFeedsDetailed } from "../gtfs/realtime.js";
+import { fetchAllFeeds } from "../gtfs/realtime.js";
 import { FeedHealthResponseSchema } from "../types.js";
 import {
   type ToolContext,
@@ -59,7 +59,7 @@ export function registerFeedHealthTools(ctx: ToolContext): void {
             return;
           }
 
-          const results = await fetchAllFeedsDetailed(urls, config.auth);
+          const results = await fetchAllFeeds(urls, config.auth);
           const ok = results.filter((r) => r.ok);
           const failed = results.filter((r) => !r.ok);
           const timestamps = ok

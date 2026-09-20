@@ -98,11 +98,11 @@ export async function fetchFeed(
 }
 
 /**
- * Fetch all feeds concurrently, returning per-URL outcomes. Callers that
- * only want entities can flatMap `.entities`; callers that need operational
- * visibility (get_feed_health) can inspect `.ok` / `.error` per feed.
+ * Fetch all feeds concurrently, returning per-URL outcomes. Tools go through
+ * fetchRealtime (tools/helpers.ts), which turns `.ok` / `.error` into a
+ * status the model can see; get_feed_health reports them per feed.
  */
-export async function fetchAllFeedsDetailed(
+export async function fetchAllFeeds(
   urls: string[],
   auth: AuthConfig | null
 ): Promise<FeedFetchResult[]> {
@@ -137,12 +137,4 @@ export async function fetchAllFeedsDetailed(
   );
 
   return results;
-}
-
-export async function fetchAllFeeds(
-  urls: string[],
-  auth: AuthConfig | null
-): Promise<IFeedEntity[]> {
-  const results = await fetchAllFeedsDetailed(urls, auth);
-  return results.flatMap((r) => r.entities);
 }

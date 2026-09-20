@@ -295,6 +295,13 @@ async function phase3(client: Client, system: SystemConfig, tracker: Tracker): P
 // ---------- Phase 4: alerts ----------
 
 async function phase4(client: Client, system: SystemConfig, tracker: Tracker): Promise<void> {
+  if (system.realtime.alerts.length === 0) {
+    writeCall(system.id, "phase4", "skipped_no_alerts_feed", {
+      tool: "n/a", args: {}, ok: true, ms: 0, result: "no alerts configured",
+    });
+    return;
+  }
+
   const run = phaseRunner(client, system, "phase4", tracker);
   const unfiltered = await run("get_alerts_unfiltered", "get_alerts", { system: system.id });
 

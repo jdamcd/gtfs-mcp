@@ -4,7 +4,6 @@ import {
   occupancyStatusName,
   vehicleStopStatusName,
 } from "../gtfs/enumNames.js";
-import { fetchAllFeeds } from "../gtfs/realtime.js";
 import { extractRtTime, formatLocalTime } from "../time.js";
 import { VehiclesResponseSchema, type VehiclePosition } from "../types.js";
 import {
@@ -12,6 +11,8 @@ import {
   resolveSystem,
   unknownSystemResponse,
   jsonResponse,
+  errorResponse,
+  fetchRealtime,
 } from "./helpers.js";
 
 export function registerVehicleTools(ctx: ToolContext): void {
@@ -35,10 +36,18 @@ export function registerVehicleTools(ctx: ToolContext): void {
       const config = resolveSystem(ctx.systems, system);
       if (!config) return unknownSystemResponse(system, ctx.systems);
 
-      const entities = await fetchAllFeeds(
-        config.realtime.vehicle_positions,
-        config.auth
-      );
+      const rt = await fetchRealtime(config, "vehicle_positions");
+      if (rt.status === "not_configured") {
+        return errorResponse(
+          `${rt.message} Vehicle positions are unavailable for this system.`
+        );
+      }
+      if (rt.status === "failed") {
+        return errorResponse(
+          `${rt.message} Vehicle positions are unknown right now. get_feed_health has details.`
+        );
+      }
+      const entities = rt.entities;
 
       // Filter before transforming
       const filtered = entities.filter((e) => {
@@ -69,7 +78,10 @@ export function registerVehicleTools(ctx: ToolContext): void {
         };
       });
 
-      return jsonResponse({ vehicles });
+      return jsonResponse({
+        vehicles,
+        ...(rt.message ? { warnings: [rt.message] } : {}),
+      });
     }
   );
 }

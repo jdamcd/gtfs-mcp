@@ -5,7 +5,6 @@ import {
   makeStopNameResolver,
   type GtfsDb,
 } from "../gtfs/queries.js";
-import { fetchAllFeeds } from "../gtfs/realtime.js";
 import {
   stopStatusFromRelationship,
   tripStatusFromRelationship,
@@ -19,6 +18,7 @@ import {
   jsonResponse,
   errorResponse,
   getReadyDb,
+  fetchRealtime,
 } from "./helpers.js";
 
 export function registerTripTools(ctx: ToolContext): void {
@@ -45,11 +45,11 @@ export function registerTripTools(ctx: ToolContext): void {
       const db = await getReadyDb(config, ctx.dataDir, ctx.refreshHours);
       const details = getTripDetails(db, trip_id);
 
-      const entities = await fetchAllFeeds(
-        config.realtime.trip_updates,
-        config.auth
-      );
-      const tripUpdate = entities.find(
+      const rt = await fetchRealtime(config, "trip_updates");
+      const rtProblem =
+        rt.status === "failed" || rt.status === "partial" ? rt.message : null;
+      const warnings = rtProblem ? { warnings: [rtProblem] } : {};
+      const tripUpdate = rt.entities.find(
         (e) => e.tripUpdate?.trip?.tripId === trip_id
       )?.tripUpdate;
 
@@ -59,10 +59,13 @@ export function registerTripTools(ctx: ToolContext): void {
         // the static schedule).
         if (!tripUpdate) {
           return errorResponse(
-            `Trip not found: ${trip_id}. trip_ids come from get_arrivals and are only meaningful shortly after they are returned — realtime trips are short-lived.`
+            `Trip not found: ${trip_id}. trip_ids come from get_arrivals and are only meaningful shortly after they are returned — realtime trips are short-lived.${rtProblem ? ` Note: ${rtProblem} A realtime-only trip can't be looked up until the feed recovers.` : ""}`
           );
         }
-        return jsonResponse(synthesiseTripFromRt(db, config.timezone, trip_id, tripUpdate));
+        return jsonResponse({
+          ...synthesiseTripFromRt(db, config.timezone, trip_id, tripUpdate),
+          ...warnings,
+        });
       }
 
       const realtimeByStop = new Map<
@@ -114,6 +117,7 @@ export function registerTripTools(ctx: ToolContext): void {
           ),
         },
         stop_times: stopTimes,
+        ...warnings,
       });
     }
   );

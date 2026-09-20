@@ -111,6 +111,15 @@ export const FeedStatusSchema = z.object({
   errors: z.array(z.string()),
 });
 
+// Only included when a realtime feed failed. Left out otherwise,
+// rather than sent as an empty list.
+const WarningsSchema = z
+  .array(z.string())
+  .optional()
+  .describe(
+    "Realtime feed problems affecting this result; relay them rather than presenting the data as complete"
+  );
+
 // --- Tool response schemas (top-level structuredContent shape) ---
 
 export const ListSystemsResponseSchema = z.object({
@@ -143,19 +152,23 @@ export const RouteDetailsResponseSchema = z.object({
 export const ArrivalsResponseSchema = z.object({
   data_source: z.enum(["realtime", "scheduled", "mixed", "none"]),
   arrivals: z.array(ArrivalSchema),
+  warnings: WarningsSchema,
 });
 
 export const AlertsResponseSchema = z.object({
   alerts: z.array(AlertSchema),
+  warnings: WarningsSchema,
 });
 
 export const VehiclesResponseSchema = z.object({
   vehicles: z.array(VehiclePositionSchema),
+  warnings: WarningsSchema,
 });
 
 export const TripDetailsResponseSchema = z.object({
   trip: TripSchema,
   stop_times: z.array(TripStopTimeSchema),
+  warnings: WarningsSchema,
 });
 
 export const FeedHealthResponseSchema = z.object({

@@ -1,7 +1,6 @@
 import type { transit_realtime as TransitRealtime } from "gtfs-realtime-bindings";
 import { z } from "zod";
 import { alertCauseName, alertEffectName } from "../gtfs/enumNames.js";
-import { fetchAllFeeds } from "../gtfs/realtime.js";
 import { isAlertActiveAt } from "../gtfs/rtHelpers.js";
 import { extractRtTime, formatLocalDateTime } from "../time.js";
 import {
@@ -15,6 +14,8 @@ import {
   resolveSystem,
   unknownSystemResponse,
   jsonResponse,
+  errorResponse,
+  fetchRealtime,
 } from "./helpers.js";
 
 function getTranslatedText(
@@ -61,10 +62,18 @@ export function registerAlertTools(ctx: ToolContext): void {
       const config = resolveSystem(ctx.systems, system);
       if (!config) return unknownSystemResponse(system, ctx.systems);
 
-      const entities = await fetchAllFeeds(
-        config.realtime.alerts,
-        config.auth
-      );
+      const rt = await fetchRealtime(config, "alerts");
+      if (rt.status === "not_configured") {
+        return errorResponse(
+          `${rt.message} Alerts are unavailable for this system — that is not the same as there being no alerts.`
+        );
+      }
+      if (rt.status === "failed") {
+        return errorResponse(
+          `${rt.message} Alert status is unknown — do not report this as no alerts. get_feed_health has details.`
+        );
+      }
+      const entities = rt.entities;
 
       const nowSecs = Math.floor(Date.now() / 1000);
 
@@ -115,7 +124,10 @@ export function registerAlertTools(ctx: ToolContext): void {
         };
       });
 
-      return jsonResponse({ alerts });
+      return jsonResponse({
+        alerts,
+        ...(rt.message ? { warnings: [rt.message] } : {}),
+      });
     }
   );
 }

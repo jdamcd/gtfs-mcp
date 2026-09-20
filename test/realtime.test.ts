@@ -136,8 +136,8 @@ describe("fetchFeed", () => {
 
 describe("fetchAllFeeds", () => {
   it("returns empty array for empty URL list", async () => {
-    const entities = await fetchAllFeeds([], null);
-    expect(entities).toEqual([]);
+    const results = await fetchAllFeeds([], null);
+    expect(results).toEqual([]);
   });
 
   it("merges entities from multiple feeds", async () => {
@@ -155,12 +155,12 @@ describe("fetchAllFeeds", () => {
       return new Response(body, { status: 200 });
     });
 
-    const entities = await fetchAllFeeds(
+    const results = await fetchAllFeeds(
       ["http://test/feed1", "http://test/feed2"],
       null
     );
 
-    expect(entities).toHaveLength(2);
+    expect(results.flatMap((r) => r.entities)).toHaveLength(2);
     expect(callCount).toBe(2);
   });
 
@@ -179,13 +179,15 @@ describe("fetchAllFeeds", () => {
     // Suppress console.error for this test
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const entities = await fetchAllFeeds(
+    const results = await fetchAllFeeds(
       ["http://test/good", "http://test/bad"],
       null
     );
 
-    // Should still return entities from the good feed
-    expect(entities).toHaveLength(1);
+    // Should still return entities from the good feed, and say which one failed
+    expect(results.flatMap((r) => r.entities)).toHaveLength(1);
+    expect(results.map((r) => r.ok)).toEqual([true, false]);
+    expect(results[1].error).toContain("500");
     expect(consoleError).toHaveBeenCalled();
   });
 
@@ -203,12 +205,13 @@ describe("fetchAllFeeds", () => {
 
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const entities = await fetchAllFeeds(
+    const results = await fetchAllFeeds(
       ["http://test/good", "http://test/corrupt"],
       null
     );
 
-    expect(entities).toHaveLength(1);
+    expect(results.flatMap((r) => r.entities)).toHaveLength(1);
+    expect(results.map((r) => r.ok)).toEqual([true, false]);
     expect(consoleError).toHaveBeenCalled();
   });
 });

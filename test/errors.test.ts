@@ -7,6 +7,7 @@ import {
   cleanupTestDb,
   createTestConfig,
   getJsonContent,
+  encodeAlertFeed,
 } from "./helpers.js";
 import { clearFeedCache } from "../src/gtfs/realtime.js";
 
@@ -41,6 +42,10 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+function errorText(result: any): string {
+  return result.content[0].text;
+}
+
 async function makeClient(config: AppConfig): Promise<Client> {
   const server = createServer(config);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -73,24 +78,61 @@ describe("realtime fetch failures", () => {
       expect(a.is_realtime).toBe(false);
     }
     expect(response.data_source).toBe("scheduled");
+    expect(response.warnings).toHaveLength(1);
+    expect(response.warnings[0]).toContain("trip updates feed");
+    expect(response.warnings[0]).toContain("500");
   });
 
-  it("get_alerts returns [] when alerts feed fails", async () => {
+  // An empty list here would read as "no alerts, good service".
+  it("get_alerts is an error, not [], when the alerts feed fails", async () => {
     const client = await makeClient(createTestConfig());
     const result = await client.callTool({
       name: "get_alerts",
       arguments: { system: "test" },
     });
-    expect(getJsonContent(result)).toMatchObject({ alerts: [] });
+    expect(result.isError).toBe(true);
+    expect(errorText(result)).toContain("could not be fetched");
+    expect(errorText(result)).toContain("500");
   });
 
-  it("get_vehicles returns [] when vehicle_positions feed fails", async () => {
+  it("get_vehicles is an error, not [], when the vehicle_positions feed fails", async () => {
     const client = await makeClient(createTestConfig());
     const result = await client.callTool({
       name: "get_vehicles",
       arguments: { system: "test" },
     });
-    expect(getJsonContent(result)).toMatchObject({ vehicles: [] });
+    expect(result.isError).toBe(true);
+    expect(errorText(result)).toContain("could not be fetched");
+  });
+
+  it("get_trip keeps the scheduled trip but warns when trip_updates fails", async () => {
+    const client = await makeClient(createTestConfig());
+    vi.useFakeTimers({ now: new Date("2026-04-20T07:00:00-04:00") });
+    const { arrivals } = getJsonContent(
+      await client.callTool({
+        name: "get_arrivals",
+        arguments: { system: "test", stop_id: "S1S" },
+      })
+    ) as any;
+
+    const result = await client.callTool({
+      name: "get_trip",
+      arguments: { system: "test", trip_id: arrivals[0].trip_id },
+    });
+    const data = getJsonContent(result) as any;
+    expect(data.trip.trip_id).toBe(arrivals[0].trip_id);
+    expect(data.warnings).toHaveLength(1);
+  });
+
+  it("get_trip mentions the feed failure when the trip isn't in the schedule", async () => {
+    const client = await makeClient(createTestConfig());
+    const result = await client.callTool({
+      name: "get_trip",
+      arguments: { system: "test", trip_id: "RT_ONLY_TRIP" },
+    });
+    expect(result.isError).toBe(true);
+    expect(errorText(result)).toContain("Trip not found");
+    expect(errorText(result)).toContain("could not be fetched");
   });
 
   it("get_feed_health reports error per feed type and doesn't throw", async () => {
@@ -108,6 +150,35 @@ describe("realtime fetch failures", () => {
       expect(feed.entities).toBe(0);
       expect(feed.errors.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("partial realtime fetch failures", () => {
+  it("get_alerts returns what it could fetch, with a warning", async () => {
+    const config = createTestConfig();
+    config.systems[0].realtime.alerts = [
+      "http://localhost/alerts-good",
+      "http://localhost/alerts-bad",
+    ];
+    const alertFeed = encodeAlertFeed([
+      { id: "a1", headerText: "Delays", descriptionText: "Signal problems" },
+    ]);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) =>
+      String(url).includes("bad")
+        ? new Response("Upstream error", { status: 500, statusText: "Error" })
+        : new Response(alertFeed, { status: 200 })
+    );
+
+    const client = await makeClient(config);
+    const result = await client.callTool({
+      name: "get_alerts",
+      arguments: { system: "test" },
+    });
+    const data = getJsonContent(result) as any;
+    expect(result.isError).toBeFalsy();
+    expect(data.alerts.map((a: any) => a.id)).toEqual(["a1"]);
+    expect(data.warnings).toHaveLength(1);
+    expect(data.warnings[0]).toContain("1 of 2 alerts feeds");
   });
 });
 
@@ -135,13 +206,13 @@ describe("malformed protobuf in realtime feeds", () => {
     }
   });
 
-  it("get_alerts returns [] when alerts protobuf is corrupt", async () => {
+  it("get_alerts is an error when alerts protobuf is corrupt", async () => {
     const client = await makeClient(createTestConfig());
     const result = await client.callTool({
       name: "get_alerts",
       arguments: { system: "test" },
     });
-    expect(getJsonContent(result)).toMatchObject({ alerts: [] });
+    expect(result.isError).toBe(true);
   });
 });
 
@@ -181,24 +252,28 @@ describe("empty realtime config", () => {
     for (const a of arrivals) {
       expect(a.is_realtime).toBe(false);
     }
+    // Schedule-only is a normal configuration, not a problem to flag.
+    expect(response.warnings).toBeUndefined();
   });
 
-  it("get_alerts returns [] when no alerts are configured", async () => {
+  it("get_alerts says alerts are unavailable when no alerts feed is configured", async () => {
     const client = await makeClient(emptyRealtimeConfig);
     const result = await client.callTool({
       name: "get_alerts",
       arguments: { system: "test" },
     });
-    expect(getJsonContent(result)).toMatchObject({ alerts: [] });
+    expect(result.isError).toBe(true);
+    expect(errorText(result)).toContain("No alerts feed is configured");
   });
 
-  it("get_vehicles returns [] when no vehicle_positions are configured", async () => {
+  it("get_vehicles says positions are unavailable when no feed is configured", async () => {
     const client = await makeClient(emptyRealtimeConfig);
     const result = await client.callTool({
       name: "get_vehicles",
       arguments: { system: "test" },
     });
-    expect(getJsonContent(result)).toMatchObject({ vehicles: [] });
+    expect(result.isError).toBe(true);
+    expect(errorText(result)).toContain("No vehicle positions feed is configured");
   });
 
   it("get_feed_health reports feeds as not configured when no URLs are set", async () => {

@@ -4,7 +4,6 @@ import {
   makeStopNameResolver,
   resolveStopIds,
 } from "../gtfs/queries.js";
-import { fetchAllFeeds } from "../gtfs/realtime.js";
 import {
   STOP_NO_DATA,
   STOP_SKIPPED,
@@ -34,6 +33,7 @@ import {
   unknownSystemResponse,
   jsonResponse,
   getReadyDb,
+  fetchRealtime,
 } from "./helpers.js";
 
 type Sortable = { arrival: Arrival; absMs: number };
@@ -44,7 +44,7 @@ export function registerArrivalTools(ctx: ToolContext): void {
     {
       title: "Get arrivals at a stop",
       description:
-        "Get upcoming arrivals at a stop. Accepts a parent station ID and resolves to all child platforms. Merges realtime data (authoritative within its horizon) with scheduled times (fills beyond). Cancelled trips and skipped stops are excluded; includes services that roll past midnight via yesterday's 24h+ stop_times. Returns data_source indicating which inputs contributed.",
+        "Get upcoming arrivals at a stop. Accepts a parent station ID and resolves to all child platforms. Merges realtime data (authoritative within its horizon) with scheduled times (fills beyond). Cancelled trips and skipped stops are excluded; includes services that roll past midnight via yesterday's 24h+ stop_times. Returns data_source indicating which inputs contributed, and `warnings` when a realtime feed could not be fetched.",
       inputSchema: {
         system: z.string().describe("System ID, from list_systems"),
         stop_id: z
@@ -76,10 +76,8 @@ export function registerArrivalTools(ctx: ToolContext): void {
       const nowMs = Date.now();
       const tz = config.timezone;
 
-      const entities = await fetchAllFeeds(
-        config.realtime.trip_updates,
-        config.auth
-      );
+      const rt = await fetchRealtime(config, "trip_updates");
+      const entities = rt.entities;
 
       const realtime: Sortable[] = [];
 
@@ -223,7 +221,22 @@ export function registerArrivalTools(ctx: ToolContext): void {
       else if (hasSched) data_source = "scheduled";
       else data_source = "none";
 
-      const response: ArrivalsResponse = { data_source, arrivals: combined };
+      // A schedule-only system is normal and data_source already says so; a
+      // feed that should have answered and didn't is worth telling the model.
+      const warnings: string[] = [];
+      if (rt.status === "failed") {
+        warnings.push(
+          `${rt.message} Times are from the schedule only and won't reflect delays or cancellations.`
+        );
+      } else if (rt.status === "partial") {
+        warnings.push(rt.message);
+      }
+
+      const response: ArrivalsResponse = {
+        data_source,
+        arrivals: combined,
+        ...(warnings.length ? { warnings } : {}),
+      };
       return jsonResponse(response);
     }
   );
