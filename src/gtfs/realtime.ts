@@ -3,6 +3,7 @@ import type { transit_realtime as TransitRealtime } from "gtfs-realtime-bindings
 const { transit_realtime } = GtfsRealtimeBindings;
 import type { AuthConfig } from "../config.js";
 import { applyAuth } from "../auth.js";
+import { extractRtTime } from "../time.js";
 
 const CACHE_TTL_MS = 30_000;
 const FETCH_TIMEOUT_MS = 10_000;
@@ -112,13 +113,12 @@ export async function fetchAllFeedsDetailed(
       const start = Date.now();
       try {
         const feed = await fetchFeed(url, auth);
+        const headerMs = extractRtTime(feed.header?.timestamp);
         return {
           url,
           ok: true,
           entities: feed.entity ?? [],
-          headerTimestamp: feed.header?.timestamp
-            ? Number(feed.header.timestamp)
-            : null,
+          headerTimestamp: headerMs ? headerMs / 1000 : null,
           durationMs: Date.now() - start,
         };
       } catch (err) {

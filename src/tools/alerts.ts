@@ -3,7 +3,7 @@ import { z } from "zod";
 import { alertCauseName, alertEffectName } from "../gtfs/enumNames.js";
 import { fetchAllFeeds } from "../gtfs/realtime.js";
 import { isAlertActiveAt } from "../gtfs/rtHelpers.js";
-import { formatLocalDateTime } from "../time.js";
+import { extractRtTime, formatLocalDateTime } from "../time.js";
 import {
   AlertsResponseSchema,
   type Alert,
@@ -85,6 +85,11 @@ export function registerAlertTools(ctx: ToolContext): void {
         return true;
       });
 
+      const formatBound = (bound: unknown) => {
+        const ms = extractRtTime(bound);
+        return ms ? formatLocalDateTime(new Date(ms), config.timezone) : null;
+      };
+
       const alerts: Alert[] = filtered.map((e) => {
         const a = e.alert!;
         const informedEntities: InformedEntity[] = (
@@ -96,14 +101,7 @@ export function registerAlertTools(ctx: ToolContext): void {
         }));
 
         const activePeriods: ActivePeriod[] = (a.activePeriod ?? []).map(
-          (ap) => ({
-            start: ap.start
-              ? formatLocalDateTime(new Date(Number(ap.start) * 1000), config.timezone)
-              : null,
-            end: ap.end
-              ? formatLocalDateTime(new Date(Number(ap.end) * 1000), config.timezone)
-              : null,
-          })
+          (ap) => ({ start: formatBound(ap.start), end: formatBound(ap.end) })
         );
 
         return {

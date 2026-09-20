@@ -857,6 +857,56 @@ describe("get_alerts active_period filtering", () => {
     }
   });
 
+  it("treats an unset active_period bound as open-ended", async () => {
+    // Real MTA pattern: live delay alerts carry a start but no end. The
+    // decoder fills the unset bound with a Long(0) object, which is truthy.
+    const nowSecs = Math.floor(Date.now() / 1000);
+    const alertFeed = encodeAlertFeed([
+      {
+        id: "no-end",
+        headerText: "Delays",
+        descriptionText: "Started an hour ago, no end announced",
+        activePeriods: [{ start: nowSecs - 3600 }],
+      },
+      {
+        id: "no-start",
+        headerText: "Until further notice",
+        descriptionText: "No start, ends in an hour",
+        activePeriods: [{ end: nowSecs + 3600 }],
+      },
+      {
+        id: "no-end-future",
+        headerText: "Planned",
+        descriptionText: "Starts tomorrow, no end announced",
+        activePeriods: [{ start: nowSecs + 86400 }],
+      },
+    ]);
+
+    const { clearFeedCache } = await import("../src/gtfs/realtime.js");
+    clearFeedCache();
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      if (String(url).includes("alerts")) {
+        return new Response(alertFeed, { status: 200 });
+      }
+      return new Response(new Uint8Array(), { status: 200 });
+    });
+
+    try {
+      const result = await client.callTool({
+        name: "get_alerts",
+        arguments: { system: "test" },
+      });
+      const alerts = getJsonContent(result).alerts;
+      const byId = new Map(alerts.map((a: any) => [a.id, a]));
+      expect([...byId.keys()].sort()).toEqual(["no-end", "no-start"]);
+      expect((byId.get("no-end") as any).active_periods[0].end).toBeNull();
+      expect((byId.get("no-start") as any).active_periods[0].start).toBeNull();
+    } finally {
+      clearFeedCache();
+    }
+  });
+
   it("normalises proto3 empty-string selectors to null in informed_entities", async () => {
     // Real MTA pattern: a stop-only selector arrives as { routeId: "", stopId: "D15" }
     // because proto3 encodes unset strings as "". Consumers should see null, not "".

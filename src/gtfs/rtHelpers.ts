@@ -1,5 +1,6 @@
 import GtfsRealtimeBindings from "gtfs-realtime-bindings";
 import type { transit_realtime as TransitRealtime } from "gtfs-realtime-bindings";
+import { extractRtTime } from "../time.js";
 
 const { transit_realtime } = GtfsRealtimeBindings;
 
@@ -33,17 +34,19 @@ export function stopStatusFromRelationship(
 
 // GTFS-RT: an alert with no active_period is always active. Otherwise it's
 // active if at least one period covers now. start=0/unset means -infinity,
-// end=0/unset means +infinity.
+// end=0/unset means +infinity. Unset bounds decode as a Long(0) object, which
+// is truthy, so they go through extractRtTime rather than a truthiness check.
 export function isAlertActiveAt(
   alert: TransitRealtime.IAlert,
   nowSecs: number
 ): boolean {
   const periods = alert.activePeriod;
   if (!periods || periods.length === 0) return true;
+  const nowMs = nowSecs * 1000;
   for (const p of periods) {
-    const start = p.start ? Number(p.start) : 0;
-    const end = p.end ? Number(p.end) : Number.MAX_SAFE_INTEGER;
-    if (nowSecs >= start && nowSecs <= end) return true;
+    const start = extractRtTime(p.start) ?? 0;
+    const end = extractRtTime(p.end) ?? Number.MAX_SAFE_INTEGER;
+    if (nowMs >= start && nowMs <= end) return true;
   }
   return false;
 }

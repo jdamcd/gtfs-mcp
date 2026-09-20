@@ -5,7 +5,7 @@ import {
   vehicleStopStatusName,
 } from "../gtfs/enumNames.js";
 import { fetchAllFeeds } from "../gtfs/realtime.js";
-import { formatLocalTime } from "../time.js";
+import { extractRtTime, formatLocalTime } from "../time.js";
 import { VehiclesResponseSchema, type VehiclePosition } from "../types.js";
 import {
   type ToolContext,
@@ -50,6 +50,7 @@ export function registerVehicleTools(ctx: ToolContext): void {
       const vehicles: VehiclePosition[] = filtered.map((e) => {
         const v = e.vehicle!;
         const pos = v.position!;
+        const timestampMs = extractRtTime(v.timestamp);
         return {
           vehicle_id: v.vehicle?.id ?? null,
           trip_id: v.trip?.tripId ?? null,
@@ -58,8 +59,8 @@ export function registerVehicleTools(ctx: ToolContext): void {
           longitude: pos.longitude ?? 0,
           bearing: pos.bearing ?? null,
           speed: pos.speed ?? null,
-          timestamp: v.timestamp
-            ? formatLocalTime(new Date(Number(v.timestamp) * 1000), config.timezone)
+          timestamp: timestampMs
+            ? formatLocalTime(new Date(timestampMs), config.timezone)
             : null,
           stop_id: v.stopId ?? null,
           current_status: vehicleStopStatusName(v.currentStatus),
