@@ -18,6 +18,10 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
+      # setup-node ships npm 10 with Node 22 and npm 11 with Node 24, and the
+      # two disagree about promptfoo's optional peers, so npm ci fails on one
+      # or the other. Use the npm major the lockfile is generated with.
+      - run: npm install -g npm@11
       - run: npm ci
       - run: npm run build
       - run: npm test
