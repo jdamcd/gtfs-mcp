@@ -1,5 +1,5 @@
-import { importGtfs, openDb } from "gtfs";
-import { existsSync, statSync, mkdirSync, unlinkSync } from "node:fs";
+import { closeDb, importGtfs, openDb } from "gtfs";
+import { existsSync, statSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { SystemConfig } from "../config.js";
 import { applyAuth } from "../auth.js";
@@ -51,6 +51,14 @@ export async function ensureGtfsLoaded(
   }
 }
 
+// The gtfs package keeps its own registry of connections keyed by path, and
+// openDb hands back the registered instance. Closing one with db.close()
+// leaves a dead entry that importGtfs would receive next time, so every
+// release goes through closeDb.
+function releaseDb(sqlitePath: string): void {
+  closeDb(openDb({ sqlitePath }));
+}
+
 async function doImport(
   system: SystemConfig,
   dataDir: string,
@@ -58,21 +66,16 @@ async function doImport(
 ): Promise<void> {
   mkdirSync(join(dataDir, system.id), { recursive: true });
 
-  // Close and drop any cached connection so the old file handle is released
-  // before importGtfs overwrites the DB.
-  const cached = dbConnections.get(system.id);
-  if (cached) {
-    cached.close();
-    dbConnections.delete(system.id);
-  }
-
+  // importGtfs drops every table before it downloads anything, so it can't
+  // run against the live DB: a failed download would leave nothing to serve.
+  const tmpPath = `${dbPath}.tmp`;
   const { url, headers } = applyAuth(system.schedule_url, system.auth);
 
   console.error(`[gtfs-mcp] Importing GTFS data for ${system.name}...`);
   try {
     await importGtfs({
       agencies: [{ url, headers }],
-      sqlitePath: dbPath,
+      sqlitePath: tmpPath,
       ignoreDuplicates: true,
       verbose: false,
       // The gtfs package default is 30s, which is too short for large feeds
@@ -80,14 +83,20 @@ async function doImport(
       downloadTimeout: 300_000,
     });
   } catch (err) {
-    // Remove any partial DB so the next attempt starts clean instead of opening a corrupt file.
-    try {
-      unlinkSync(dbPath);
-    } catch {
-      // Already absent — fine.
-    }
+    releaseDb(tmpPath);
+    rmSync(tmpPath, { force: true });
     throw err;
   }
+  releaseDb(tmpPath);
+
+  // No await between here and the rename, so nothing can reopen the old
+  // file in the gap.
+  const cached = dbConnections.get(system.id);
+  if (cached) {
+    closeDb(cached);
+    dbConnections.delete(system.id);
+  }
+  renameSync(tmpPath, dbPath);
   console.error(`[gtfs-mcp] Import complete for ${system.name}`);
 
   loadedSystems.set(system.id, { loadedAt: Date.now() });
