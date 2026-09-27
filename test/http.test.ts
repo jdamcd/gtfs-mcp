@@ -253,7 +253,7 @@ describe("HTTP transport", () => {
   });
 
   it("413 for oversized body", async () => {
-    const big = "x".repeat(5 * 1024 * 1024);
+    const big = "x".repeat(300 * 1024);
     const res = await fetch(`http://localhost:${port}/mcp`, {
       method: "POST",
       headers: {
@@ -263,5 +263,19 @@ describe("HTTP transport", () => {
       body: big,
     });
     expect(res.status).toBe(413);
+  });
+
+  it("hangs up on a body far beyond the cap instead of reading it all", async () => {
+    const huge = "x".repeat(4 * 1024 * 1024);
+    await expect(
+      fetch(`http://localhost:${port}/mcp`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        body: huge,
+      })
+    ).rejects.toThrow();
   });
 });

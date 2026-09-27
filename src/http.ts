@@ -11,7 +11,12 @@ import { loadConfig } from "./config.js";
 import { createServer } from "./server.js";
 
 const MCP_PATH = "/mcp";
-const MAX_BODY_BYTES = 4 * 1024 * 1024;
+// Real requests are tool calls with a few short arguments: a few hundred bytes.
+const MAX_BODY_BYTES = 256 * 1024;
+// Over MAX_BODY_BYTES the rest of the body is read and discarded rather than
+// buffered. Closing the socket mid-upload would give the client a connection
+// reset instead of the 413. Past this ceiling the connection is dropped.
+const MAX_DRAIN_BYTES = 8 * MAX_BODY_BYTES;
 
 function parseEnvList(value: string | undefined): string[] | null {
   if (!value) return null;
@@ -110,12 +115,20 @@ export function createHttpMcpServer(config: AppConfig): HttpMcpServer {
       for await (const chunk of req) {
         const buf = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
         totalBytes += buf.length;
-        if (totalBytes > MAX_BODY_BYTES) {
-          res.setHeader("Connection", "close");
-          res.writeHead(413).end("Payload Too Large");
+        if (totalBytes > MAX_DRAIN_BYTES) {
+          req.socket.destroy();
           return;
         }
+        if (totalBytes > MAX_BODY_BYTES) {
+          chunks.length = 0;
+          continue;
+        }
         chunks.push(buf);
+      }
+      if (totalBytes > MAX_BODY_BYTES) {
+        res.setHeader("Connection", "close");
+        res.writeHead(413).end("Payload Too Large");
+        return;
       }
 
       let body: unknown;
