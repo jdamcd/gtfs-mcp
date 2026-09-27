@@ -1,7 +1,7 @@
 import type { transit_realtime as TransitRealtime } from "gtfs-realtime-bindings";
 import { z } from "zod";
 import { alertCauseName, alertEffectName } from "../gtfs/enumNames.js";
-import { isAlertActiveAt } from "../gtfs/rtHelpers.js";
+import { alertSeverity, alertStartMs, isAlertActiveAt } from "../gtfs/rtHelpers.js";
 import { extractRtTime, formatLocalDateTime } from "../time.js";
 import {
   AlertsResponseSchema,
@@ -40,7 +40,7 @@ export function registerAlertTools(ctx: ToolContext): void {
     {
       title: "Get service alerts",
       description:
-        "Get service alerts for a transit system. By default returns only alerts active right now (per GTFS-RT active_period semantics); set include_inactive=true to include planned/future/expired alerts.",
+        "Get service alerts for a transit system, most disruptive first. By default returns only alerts active right now (per GTFS-RT active_period semantics); set include_inactive=true to include planned/future/expired alerts.",
       inputSchema: {
         system: z.string().describe("System ID, from list_systems"),
         route_id: z.string().optional().describe("Filter by route ID"),
@@ -94,12 +94,27 @@ export function registerAlertTools(ctx: ToolContext): void {
         return true;
       });
 
+      // Severity, then newest first, then id so the order is stable.
+      const ordered = filtered
+        .map((e) => ({
+          e,
+          severity: alertSeverity(e.alert!.effect),
+          startMs: alertStartMs(e.alert!),
+        }))
+        .sort(
+          (a, b) =>
+            a.severity - b.severity ||
+            b.startMs - a.startMs ||
+            (a.e.id ?? "").localeCompare(b.e.id ?? "")
+        )
+        .map((x) => x.e);
+
       const formatBound = (bound: unknown) => {
         const ms = extractRtTime(bound);
         return ms ? formatLocalDateTime(new Date(ms), config.timezone) : null;
       };
 
-      const alerts: Alert[] = filtered.map((e) => {
+      const alerts: Alert[] = ordered.map((e) => {
         const a = e.alert!;
         const informedEntities: InformedEntity[] = (
           a.informedEntity ?? []

@@ -859,6 +859,42 @@ describe("get_alerts active_period filtering", () => {
     }
   });
 
+  it("orders alerts by severity, then newest first", async () => {
+    const nowSecs = Math.floor(Date.now() / 1000);
+    const { transit_realtime } = (await import("gtfs-realtime-bindings")).default;
+    const Effect = transit_realtime.Alert.Effect;
+    const alertFeed = encodeAlertFeed([
+      { id: "unknown-old", headerText: "x", descriptionText: "x", activePeriods: [{ start: nowSecs - 7200 }] },
+      { id: "detour", headerText: "x", descriptionText: "x", effect: Effect.DETOUR },
+      { id: "no-service", headerText: "x", descriptionText: "x", effect: Effect.NO_SERVICE },
+      { id: "unknown-new", headerText: "x", descriptionText: "x", activePeriods: [{ start: nowSecs - 60 }] },
+      { id: "no-effect", headerText: "x", descriptionText: "x", effect: Effect.NO_EFFECT },
+    ]);
+
+    const { clearFeedCache } = await import("../src/gtfs/realtime.js");
+    clearFeedCache();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) =>
+      String(url).includes("alerts")
+        ? new Response(alertFeed, { status: 200 })
+        : new Response(new Uint8Array(), { status: 200 })
+    );
+
+    try {
+      const all = getJsonContent(
+        await client.callTool({ name: "get_alerts", arguments: { system: "test" } })
+      );
+      expect(all.alerts.map((a: any) => a.id)).toEqual([
+        "no-service",
+        "detour",
+        "unknown-new",
+        "unknown-old",
+        "no-effect",
+      ]);
+    } finally {
+      clearFeedCache();
+    }
+  });
+
   it("treats an unset active_period bound as open-ended", async () => {
     // Real MTA pattern: live delay alerts carry a start but no end. The
     // decoder fills the unset bound with a Long(0) object, which is truthy.

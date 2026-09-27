@@ -124,6 +124,7 @@ export function encodeAlertFeed(
     descriptionText: string;
     informedEntities?: Array<{ routeId?: string; stopId?: string }>;
     activePeriods?: Array<{ start?: number; end?: number }>;
+    effect?: number;
   }>
 ): Uint8Array {
   const message = transit_realtime.FeedMessage.create({
@@ -145,6 +146,7 @@ export function encodeAlertFeed(
           stopId: ie.stopId,
         })),
         activePeriod: a.activePeriods,
+        effect: a.effect,
       },
     })),
   });

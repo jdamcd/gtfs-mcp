@@ -13,6 +13,37 @@ export const STOP_SKIPPED =
 export const STOP_NO_DATA =
   transit_realtime.TripUpdate.StopTimeUpdate.ScheduleRelationship.NO_DATA;
 
+const Effect = transit_realtime.Alert.Effect;
+// Most disruptive first. Unset effect ranks with UNKNOWN_EFFECT, which is
+// what feeds that don't classify (MTA) send for everything.
+const EFFECT_RANK: number[] = [
+  Effect.NO_SERVICE,
+  Effect.REDUCED_SERVICE,
+  Effect.SIGNIFICANT_DELAYS,
+  Effect.DETOUR,
+  Effect.STOP_MOVED,
+  Effect.MODIFIED_SERVICE,
+  Effect.ACCESSIBILITY_ISSUE,
+  Effect.ADDITIONAL_SERVICE,
+  Effect.OTHER_EFFECT,
+  Effect.UNKNOWN_EFFECT,
+  Effect.NO_EFFECT,
+];
+
+/** Lower is more disruptive. */
+export function alertSeverity(effect: number | null | undefined): number {
+  const idx = EFFECT_RANK.indexOf(effect ?? Effect.UNKNOWN_EFFECT);
+  return idx === -1 ? EFFECT_RANK.indexOf(Effect.UNKNOWN_EFFECT) : idx;
+}
+
+/** Start of the alert's earliest active period in ms, or 0 if unset. */
+export function alertStartMs(alert: TransitRealtime.IAlert): number {
+  const starts = (alert.activePeriod ?? [])
+    .map((p) => extractRtTime(p.start))
+    .filter((t): t is number => t !== null);
+  return starts.length ? Math.min(...starts) : 0;
+}
+
 export type TripStatus = "scheduled" | "canceled" | "added";
 export type StopStatus = "scheduled" | "skipped" | "no_data";
 
