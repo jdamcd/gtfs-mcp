@@ -143,7 +143,6 @@ type SmokeRow = {
   import_ms: number;
   db_bytes: number | null;
   route_count: number | null;
-  stop_count: number | null;
   feeds: Record<string, string> | null;
   error: string | null;
 };
@@ -155,16 +154,21 @@ async function phase0(
   tracker: Tracker
 ): Promise<SmokeRow> {
   const run = phaseRunner(client, system, "phase0", tracker);
-  const record = await run("get_system_status", "get_system_status", { system: system.id });
+  // list_routes is the import probe: it's the cheapest tool that needs the
+  // static DB, and its `total` doubles as the route count.
+  const record = await run("list_routes_probe", "list_routes", { system: system.id, limit: 1 });
 
-  // The tool wraps import/fetch errors in a textResponse rather than throwing,
-  // so `record.ok=true` isn't enough — only a JSON payload with route_count
-  // counts as a real success.
+  // Import errors come back as a text tool error rather than a throw, so
+  // `record.ok` isn't enough — only a JSON payload with `total` counts.
   const payload = record.result;
   const isRealSuccess =
-    record.ok && typeof payload === "object" && payload != null && "route_count" in payload;
+    record.ok && typeof payload === "object" && payload != null && "total" in payload;
   const data = isRealSuccess ? (payload as any) : null;
   const toolError = !isRealSuccess && typeof payload === "string" ? payload : null;
+
+  const health = isRealSuccess
+    ? await run("get_feed_health", "get_feed_health", { system: system.id })
+    : null;
 
   return {
     system_id: system.id,
@@ -172,9 +176,8 @@ async function phase0(
     ok: isRealSuccess,
     import_ms: record.ms,
     db_bytes: dbSize(dataDir, system.id),
-    route_count: data?.route_count ?? null,
-    stop_count: data?.stop_count ?? null,
-    feeds: data?.feeds ?? null,
+    route_count: data?.total ?? null,
+    feeds: (health?.result as any)?.feeds ?? null,
     error: isRealSuccess ? null : (record.error ?? toolError ?? "unknown error"),
   };
 }
@@ -305,7 +308,7 @@ async function phase4(client: Client, system: SystemConfig, tracker: Tracker): P
   const run = phaseRunner(client, system, "phase4", tracker);
   const unfiltered = await run("get_alerts_unfiltered", "get_alerts", { system: system.id });
 
-  const alerts = (unfiltered.result as any[] | undefined) ?? [];
+  const alerts: any[] = (unfiltered.result as any)?.alerts ?? [];
   const firstRouteInAlert = alerts
     .flatMap((a) => a.informed_entities ?? [])
     .map((e: any) => e.route_id)
@@ -333,7 +336,7 @@ async function phase5(client: Client, system: SystemConfig, tracker: Tracker): P
   const run = phaseRunner(client, system, "phase5", tracker);
   const unfiltered = await run("get_vehicles_unfiltered", "get_vehicles", { system: system.id });
 
-  const vehicles = (unfiltered.result as any[] | undefined) ?? [];
+  const vehicles: any[] = (unfiltered.result as any)?.vehicles ?? [];
   const firstRouteId = vehicles.map((v) => v.route_id).find((r: unknown) => typeof r === "string");
   if (firstRouteId) {
     await run(
@@ -544,7 +547,6 @@ async function runSmoke(config: AppConfig): Promise<void> {
           import_ms: 0,
           db_bytes: null,
           route_count: null,
-          stop_count: null,
           feeds: null,
           error: err instanceof Error ? err.message : String(err),
         });
@@ -560,15 +562,14 @@ async function runSmoke(config: AppConfig): Promise<void> {
   writeFileSync(join(RESULTS_ROOT, "summary.json"), JSON.stringify(rows, null, 2));
 
   console.error("");
-  console.error("system_id              ok   import_ms  routes   stops   db_bytes");
-  console.error("---------------------- ---- ---------- -------- ------- ----------");
+  console.error("system_id              ok   import_ms  routes   db_bytes");
+  console.error("---------------------- ---- ---------- -------- ----------");
   for (const r of rows) {
     const line =
       `${r.system_id.padEnd(22)} ` +
       `${(r.ok ? "PASS" : "FAIL").padEnd(4)} ` +
       `${String(r.import_ms).padStart(10)} ` +
       `${String(r.route_count ?? "-").padStart(8)} ` +
-      `${String(r.stop_count ?? "-").padStart(7)} ` +
       `${String(r.db_bytes ?? "-").padStart(10)}`;
     console.error(line);
     if (!r.ok && r.error) console.error(`                       err: ${r.error}`);

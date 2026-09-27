@@ -31,8 +31,6 @@ export type RunContext = {
   arrivalsTripIds: Set<string>;
   /** Most recent search_stops result set, for the parent/child cross-check */
   lastSearchStopIds: Set<string> | null;
-  /** Unfiltered list_routes length, for CFG-01 */
-  listRoutesCount: number | null;
 };
 
 export function createRunContext(
@@ -47,7 +45,6 @@ export function createRunContext(
     observedTripIds: new Set(),
     arrivalsTripIds: new Set(),
     lastSearchStopIds: null,
-    listRoutesCount: null,
   };
 }
 
@@ -73,7 +70,6 @@ const checks: Record<string, InvariantFn> = {
   get_trip: checkGetTrip,
   get_alerts: checkGetAlerts,
   get_vehicles: checkGetVehicles,
-  get_system_status: checkGetSystemStatus,
 };
 
 export function runInvariants(record: CallRecord, ctx: RunContext): Violation[] {
@@ -82,8 +78,9 @@ export function runInvariants(record: CallRecord, ctx: RunContext): Violation[] 
 }
 
 function checkListSystems(record: CallRecord, ctx: RunContext): Violation[] {
-  if (!record.ok || !Array.isArray(record.result)) return [];
-  const got = new Set((record.result as any[]).map((s) => s?.id));
+  const systems = (record.result as any)?.systems;
+  if (!record.ok || !Array.isArray(systems)) return [];
+  const got = new Set(systems.map((s: any) => s?.id));
   const expected = new Set(ctx.configuredSystems.map((s) => s.id));
   const missing = [...expected].filter((id) => !got.has(id));
   const extra = [...got].filter((id) => typeof id === "string" && !expected.has(id));
@@ -116,9 +113,6 @@ function checkListRoutes(record: CallRecord, ctx: RunContext): Violation[] {
   }
 
   for (const id of ids) ctx.observedRouteIds.add(id);
-  if (record.args.route_type === undefined) {
-    ctx.listRoutesCount = routes.length;
-  }
 
   return violations;
 }
@@ -157,9 +151,10 @@ function checkGetRoute(record: CallRecord, ctx: RunContext): Violation[] {
 }
 
 function trackSearchStops(record: CallRecord, ctx: RunContext): Violation[] {
-  if (!record.ok || !Array.isArray(record.result)) return [];
-  const ids = (record.result as any[])
-    .map((s) => s?.stop_id)
+  const stops = (record.result as any)?.stops;
+  if (!record.ok || !Array.isArray(stops)) return [];
+  const ids = stops
+    .map((s: any) => s?.stop_id)
     .filter((id): id is string => typeof id === "string");
   ctx.lastSearchStopIds = new Set(ids);
   return [];
@@ -371,8 +366,8 @@ function checkGetTrip(record: CallRecord, ctx: RunContext): Violation[] {
 }
 
 function checkGetAlerts(record: CallRecord, ctx: RunContext): Violation[] {
-  if (!record.ok || !Array.isArray(record.result)) return [];
-  const alerts = record.result as any[];
+  const alerts = (record.result as any)?.alerts;
+  if (!record.ok || !Array.isArray(alerts)) return [];
   const violations: Violation[] = [];
 
   const blank = alerts.find((a) => {
@@ -412,8 +407,8 @@ function checkGetAlerts(record: CallRecord, ctx: RunContext): Violation[] {
 }
 
 function checkGetVehicles(record: CallRecord, _ctx: RunContext): Violation[] {
-  if (!record.ok || !Array.isArray(record.result)) return [];
-  const vehicles = record.result as any[];
+  const vehicles = (record.result as any)?.vehicles;
+  if (!record.ok || !Array.isArray(vehicles)) return [];
   if (vehicles.length === 0) return [];
 
   const zeroCount = vehicles.filter((v) => v.latitude === 0 && v.longitude === 0).length;
@@ -438,20 +433,4 @@ function checkGetVehicles(record: CallRecord, _ctx: RunContext): Violation[] {
       context: { count: zeroCount, total: vehicles.length },
     },
   ];
-}
-
-function checkGetSystemStatus(record: CallRecord, ctx: RunContext): Violation[] {
-  if (!record.ok || typeof record.result !== "object" || record.result == null) return [];
-  const data = record.result as any;
-  if (ctx.listRoutesCount != null && data.route_count !== ctx.listRoutesCount) {
-    return [
-      {
-        rule: "CFG-01",
-        severity: "error",
-        message: "get_system_status.route_count does not match list_routes length",
-        context: { system_status: data.route_count, list_routes: ctx.listRoutesCount },
-      },
-    ];
-  }
-  return [];
 }

@@ -21,12 +21,12 @@ function ruleIds(record: CallRecord, context: RunContext): string[] {
 
 describe("SYS-01 list_systems", () => {
   it("passes when ids match configured", () => {
-    const rec = ok("list_systems", {}, [{ id: "test-sys", name: "Test System" }]);
+    const rec = ok("list_systems", {}, { systems: [{ id: "test-sys", name: "Test System" }] });
     expect(ruleIds(rec, ctx())).toEqual([]);
   });
 
   it("flags missing or extra systems", () => {
-    const rec = ok("list_systems", {}, [{ id: "wrong", name: "Wrong" }]);
+    const rec = ok("list_systems", {}, { systems: [{ id: "wrong", name: "Wrong" }] });
     expect(ruleIds(rec, ctx())).toEqual(["SYS-01"]);
   });
 });
@@ -40,7 +40,6 @@ describe("RT-01 list_routes duplicates", () => {
     });
     expect(ruleIds(rec, c)).toEqual([]);
     expect(c.observedRouteIds.has("R1")).toBe(true);
-    expect(c.listRoutesCount).toBe(2);
   });
 
   it("flags duplicates", () => {
@@ -49,18 +48,6 @@ describe("RT-01 list_routes duplicates", () => {
       routes: [{ route_id: "R1" }, { route_id: "R1" }],
     });
     expect(ruleIds(rec, ctx())).toEqual(["RT-01"]);
-  });
-
-  it("does not set listRoutesCount when filtered by route_type", () => {
-    const c = ctx();
-    runInvariants(
-      ok("list_routes", { route_type: 1 }, {
-        total: 1,
-        routes: [{ route_id: "R1" }],
-      }),
-      c,
-    );
-    expect(c.listRoutesCount).toBeNull();
   });
 });
 
@@ -94,11 +81,13 @@ describe("ST-01 / ST-03 search_stops + get_stop", () => {
   it("flags parent+child appearing together in search_stops", () => {
     const c = ctx();
     runInvariants(
-      ok("search_stops", { query: "Central" }, [
-        { stop_id: "631" },
-        { stop_id: "631N" },
-        { stop_id: "631S" },
-      ]),
+      ok("search_stops", { query: "Central" }, {
+        stops: [
+          { stop_id: "631" },
+          { stop_id: "631N" },
+          { stop_id: "631S" },
+        ],
+      }),
       c
     );
     const rec = ok("get_stop", { stop_id: "631N" }, {
@@ -111,7 +100,7 @@ describe("ST-01 / ST-03 search_stops + get_stop", () => {
   it("does not flag standalone stops with no parent", () => {
     const c = ctx();
     runInvariants(
-      ok("search_stops", { query: "Central" }, [{ stop_id: "S1" }]),
+      ok("search_stops", { query: "Central" }, { stops: [{ stop_id: "S1" }] }),
       c
     );
     const rec = ok("get_stop", { stop_id: "S1" }, {
@@ -256,95 +245,79 @@ describe("TP-01 / TP-03 / X-ARR-TRIP / X-TRIP-ROUTE get_trip", () => {
 
 describe("AL-01 / X-ALERT-ROUTE get_alerts", () => {
   it("flags AL-01 on empty header+description", () => {
-    const rec = ok("get_alerts", {}, [{ id: "a1", header: "", description: "" }]);
+    const rec = ok("get_alerts", {}, { alerts: [{ id: "a1", header: "", description: "" }] });
     expect(ruleIds(rec, ctx())).toContain("AL-01");
   });
 
   it("passes when one of header/description is populated", () => {
-    const rec = ok("get_alerts", {}, [
-      { id: "a1", header: "Delay", description: "" },
-    ]);
+    const rec = ok("get_alerts", {}, {
+      alerts: [
+        { id: "a1", header: "Delay", description: "" },
+      ],
+    });
     expect(ruleIds(rec, ctx())).toEqual([]);
   });
 
   it("warns on unknown route_id in informed_entities", () => {
-    const rec = ok("get_alerts", {}, [
-      {
-        id: "a1",
-        header: "h",
-        description: "d",
-        informed_entities: [{ route_id: "R9" }],
-      },
-    ]);
+    const rec = ok("get_alerts", {}, {
+      alerts: [
+        {
+          id: "a1",
+          header: "h",
+          description: "d",
+          informed_entities: [{ route_id: "R9" }],
+        },
+      ],
+    });
     const c = ctx({ observedRouteIds: new Set(["R1"]) });
     expect(ruleIds(rec, c)).toContain("X-ALERT-ROUTE");
   });
 
   it("does not fire X-ALERT-ROUTE when list_routes hasn't been seen yet", () => {
-    const rec = ok("get_alerts", {}, [
-      {
-        id: "a1",
-        header: "h",
-        description: "d",
-        informed_entities: [{ route_id: "R9" }],
-      },
-    ]);
+    const rec = ok("get_alerts", {}, {
+      alerts: [
+        {
+          id: "a1",
+          header: "h",
+          description: "d",
+          informed_entities: [{ route_id: "R9" }],
+        },
+      ],
+    });
     expect(ruleIds(rec, ctx())).toEqual([]);
   });
 });
 
 describe("VP-01 get_vehicles", () => {
   it("flags as error when every vehicle is at (0, 0)", () => {
-    const rec = ok("get_vehicles", {}, [
-      { vehicle_id: "V1", latitude: 0, longitude: 0 },
-      { vehicle_id: "V2", latitude: 0, longitude: 0 },
-    ]);
+    const rec = ok("get_vehicles", {}, {
+      vehicles: [
+        { vehicle_id: "V1", latitude: 0, longitude: 0 },
+        { vehicle_id: "V2", latitude: 0, longitude: 0 },
+      ],
+    });
     const violations = runInvariants(rec, ctx());
     expect(violations[0]?.rule).toBe("VP-01");
     expect(violations[0]?.severity).toBe("error");
   });
 
   it("warns when only some vehicles are at (0, 0)", () => {
-    const rec = ok("get_vehicles", {}, [
-      { vehicle_id: "V1", latitude: 0, longitude: 0 },
-      { vehicle_id: "V2", latitude: 40.7, longitude: -74.0 },
-    ]);
+    const rec = ok("get_vehicles", {}, {
+      vehicles: [
+        { vehicle_id: "V1", latitude: 0, longitude: 0 },
+        { vehicle_id: "V2", latitude: 40.7, longitude: -74.0 },
+      ],
+    });
     const violations = runInvariants(rec, ctx());
     expect(violations[0]?.rule).toBe("VP-01");
     expect(violations[0]?.severity).toBe("warn");
   });
 
   it("passes when all vehicles have real coordinates", () => {
-    const rec = ok("get_vehicles", {}, [
-      { vehicle_id: "V1", latitude: 40.7, longitude: -74.0 },
-    ]);
-    expect(ruleIds(rec, ctx())).toEqual([]);
-  });
-});
-
-describe("CFG-01 get_system_status vs list_routes", () => {
-  it("flags mismatch between route_count and list_routes length", () => {
-    const c = ctx({ listRoutesCount: 5 });
-    const rec = ok("get_system_status", {}, {
-      system_id: "test-sys",
-      route_count: 7,
-    });
-    expect(ruleIds(rec, c)).toContain("CFG-01");
-  });
-
-  it("passes when counts match", () => {
-    const c = ctx({ listRoutesCount: 5 });
-    const rec = ok("get_system_status", {}, {
-      system_id: "test-sys",
-      route_count: 5,
-    });
-    expect(ruleIds(rec, c)).toEqual([]);
-  });
-
-  it("skips when list_routes has not run yet", () => {
-    const rec = ok("get_system_status", {}, {
-      system_id: "test-sys",
-      route_count: 5,
+    const rec = ok("get_vehicles", {}, {
+      vehicles: [
+        { vehicle_id: "V1", latitude: 40.7, longitude: -74.0 },
+      ],
     });
     expect(ruleIds(rec, ctx())).toEqual([]);
   });
