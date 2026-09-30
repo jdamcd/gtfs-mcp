@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+.github
+data
+data-testing
+campaign-results
+*.log
+.env
