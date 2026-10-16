@@ -24,7 +24,9 @@ prompts:
 #   which the 5.5 models reject.
 # - effort is pinned because the defaults differ (medium on Opus/Haiku 5.5,
 #   high on Sonnet 5.5). Sweep it as a separate experiment.
-# - showThinking: false keeps thinking text out of the graded output.
+# - showThinking: false, because thinking text is omitted by default on these
+#   models and each output would otherwise carry an empty block with a long
+#   signature, cluttering the results view.
 providers:
   - id: anthropic:messages:claude-haiku-5-5
     label: haiku-5.5
@@ -47,12 +49,8 @@ providers:
     label: opus-5.5
     config: *model_config
 
-# Every case is graded by evals/tool-calls.js, which parses the tool_use blocks
-# in the response and checks them against the case's `metadata.expect`:
-#   require: calls that must appear ({ tool, input? } or { anyOf: [...] })
-#   forbid:  tool names that must not be called
-#   noTools: the response must not call any tool
-# `input` values must match exactly (numbers within 1e-4).
+# Cases declare the calls they expect in `metadata.expect` (require / forbid /
+# noTools); the format is documented on gradeToolCalls in evals/tool-calls.js.
 defaultTest:
   assert:
     - type: javascript

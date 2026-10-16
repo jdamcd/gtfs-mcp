@@ -1,5 +1,3 @@
-// Assertion helpers for the promptfoo tool-selection evals.
-//
 // promptfoo's Anthropic provider renders a response containing tool_use blocks
 // as its content blocks joined by blank lines, with each tool_use block as a
 // single-line JSON object. We parse those blocks rather than substring-matching
@@ -8,7 +6,6 @@
 // actually called.
 
 /**
- * Extract the tool calls from a promptfoo Anthropic provider output string.
  * @param {unknown} output
  * @returns {{ name: string, input: Record<string, unknown> }[]}
  */
@@ -54,7 +51,7 @@ function describeSpec(spec) {
 }
 
 /**
- * Grade a response's tool calls against a spec.
+ * Spec format (the source of truth for promptfooconfig.yaml's metadata.expect):
  *
  * spec.require: list of requirements, all of which must hold. Each is either
  *   { tool, input? } or { anyOf: [{ tool, input? }, ...] }. `input` lists
@@ -97,8 +94,9 @@ export function gradeToolCalls(output, spec) {
 }
 
 /**
- * promptfoo entry point, applied to every case via defaultTest. Reads the spec
- * from the test case's `metadata.expect`.
+ * Specs live in test metadata rather than per-assertion config so one
+ * defaultTest assertion covers every case and each case only declares what it
+ * expects.
  */
 export function assertToolCalls(output, context) {
   const spec = context?.test?.metadata?.expect;

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Summarize a promptfoo results file (`promptfoo eval -o results.json`) as a
-// per-model comparison: pass rate with a 95% confidence interval, per-case
-// pass counts across repeats, token usage and estimated cost.
+// promptfoo's own report shows individual results, not whether one model is
+// actually better than another. With ~15 cases a few points of pass rate is
+// noise, so this reports confidence intervals and per-case consistency across
+// repeats to show which differences are real.
 //
 // Usage: node evals/summarize.js evals/results/latest.json
 
