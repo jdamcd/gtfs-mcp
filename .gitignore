@@ -5,5 +5,6 @@ dist/
 .DS_Store
 .env
 promptfoo_results/
+evals/results/
 data-testing/
 campaign-results/

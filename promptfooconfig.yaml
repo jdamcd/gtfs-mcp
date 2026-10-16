@@ -19,19 +19,44 @@ prompts:
         }
       ]
 
+# Every model gets identical settings so the comparison only varies the model.
+# - thinking must be set explicitly: without it promptfoo sends temperature: 0,
+#   which the 5.5 models reject.
+# - effort is pinned because the defaults differ (medium on Opus/Haiku 5.5,
+#   high on Sonnet 5.5). Sweep it as a separate experiment.
+# - showThinking: false keeps thinking text out of the graded output.
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
-    config:
+  - id: anthropic:messages:claude-haiku-5-5
+    label: haiku-5.5
+    config: &model_config
+      thinking:
+        type: adaptive
+      effort: medium
+      max_tokens: 4096
+      showThinking: false
       mcp:
         enabled: true
         server:
           command: node
           args:
             - dist/index.js
+  - id: anthropic:messages:claude-sonnet-5-5
+    label: sonnet-5.5
+    config: *model_config
+  - id: anthropic:messages:claude-opus-5-5
+    label: opus-5.5
+    config: *model_config
 
+# Every case is graded by evals/tool-calls.js, which parses the tool_use blocks
+# in the response and checks them against the case's `metadata.expect`:
+#   require: calls that must appear ({ tool, input? } or { anyOf: [...] })
+#   forbid:  tool names that must not be called
+#   noTools: the response must not call any tool
+# `input` values must match exactly (numbers within 1e-4).
 defaultTest:
-  options:
-    provider: anthropic:messages:claude-sonnet-4-6
+  assert:
+    - type: javascript
+      value: file://evals/tool-calls.js:assertToolCalls
 
 tests:
   # --- Tool selection: basic coverage ---
@@ -39,113 +64,138 @@ tests:
   - description: "Systems: discover available systems"
     vars:
       query: "What subway networks can I query?"
-    assert:
-      - type: javascript
-        value: "output.includes('\"name\":\"list_systems\"')"
+    metadata:
+      expect:
+        require:
+          - tool: list_systems
 
   - description: "Stops: search by name"
     vars:
       query: "I'm trying to find stops around Grand Central"
-    assert:
-      - type: javascript
-        value: "output.includes('\"name\":\"search_stops\"')"
+    metadata:
+      expect:
+        require:
+          - tool: search_stops
 
   - description: "Stops: find near coordinates"
     vars:
       query: "What subway stops are near latitude 40.7580, longitude -73.9855?"
-    assert:
-      - type: javascript
-        value: "output.includes('\"name\":\"find_nearby_stops\"') && output.includes('40.758') && output.includes('-73.9855')"
+    metadata:
+      expect:
+        require:
+          - tool: find_nearby_stops
+            input: { lat: 40.758, lon: -73.9855 }
 
   - description: "Stops: get details by ID"
     vars:
       query: "What routes serve stop 127N?"
-    assert:
-      - type: javascript
-        value: "output.includes('\"name\":\"get_stop\"') && output.includes('\"stop_id\"') && output.includes('127N')"
+    metadata:
+      expect:
+        require:
+          - tool: get_stop
+            input: { stop_id: "127N" }
 
   - description: "Routes: list all"
     vars:
       query: "What routes are in the system?"
-    assert:
-      - type: javascript
-        value: "output.includes('\"name\":\"list_routes\"')"
+    metadata:
+      expect:
+        require:
+          - tool: list_routes
 
   - description: "Routes: get details with direction"
     vars:
       query: "What stops does the 1 train make going northbound?"
-    assert:
-      # Accept either the direct get_route call or a list_routes discovery step
-      # first — the tool description encourages looking up route_ids by name
-      # when unknown, which is the more robust flow in multi-turn use.
-      - type: javascript
-        value: "output.includes('\"name\":\"get_route\"') || output.includes('\"name\":\"list_routes\"')"
+    metadata:
+      expect:
+        # Accept either the direct get_route call or a list_routes discovery
+        # step first — the tool description encourages looking up route_ids by
+        # name when unknown, which is the more robust flow in multi-turn use.
+        require:
+          - anyOf:
+              - tool: get_route
+              - tool: list_routes
 
   - description: "Arrivals: upcoming trains at a stop"
     vars:
       query: "When is the next train arriving at stop 127N?"
-    assert:
-      - type: javascript
-        value: "output.includes('\"name\":\"get_arrivals\"') && output.includes('\"stop_id\"') && output.includes('127N')"
+    metadata:
+      expect:
+        require:
+          - tool: get_arrivals
+            input: { stop_id: "127N" }
 
   - description: "Alerts: check service disruptions"
     vars:
       query: "Is there anything disrupting subway service today?"
-    assert:
-      - type: javascript
-        value: "output.includes('\"name\":\"get_alerts\"')"
+    metadata:
+      expect:
+        require:
+          - tool: get_alerts
 
   - description: "Vehicles: track positions with route filter"
     vars:
       query: "Where are all the 1 train cars right now?"
-    assert:
-      # Same reasoning as the get_route case: accept a list_routes discovery
-      # step in place of the direct call.
-      - type: javascript
-        value: "output.includes('\"name\":\"get_vehicles\"') || output.includes('\"name\":\"list_routes\"')"
+    metadata:
+      expect:
+        # Same reasoning as the get_route case: accept a list_routes discovery
+        # step in place of the direct call.
+        require:
+          - anyOf:
+              - tool: get_vehicles
+              - tool: list_routes
 
   - description: "Trips: look up specific trip"
     vars:
       query: "Can you pull up the details for trip 075850_1..N03R?"
-    assert:
-      - type: javascript
-        value: "output.includes('\"name\":\"get_trip\"') && output.includes('\"trip_id\"') && output.includes('075850_1..N03R')"
+    metadata:
+      expect:
+        require:
+          - tool: get_trip
+            input: { trip_id: "075850_1..N03R" }
 
   - description: "Feed health diagnostics"
     vars:
       query: "Are the realtime feeds healthy for mta-subway? Any fetch errors?"
-    assert:
-      - type: javascript
-        value: "output.includes('\"name\":\"get_feed_health\"')"
+    metadata:
+      expect:
+        require:
+          - tool: get_feed_health
 
   # --- Multi-tool ---
 
   - description: "Multi-tool: arrivals + alerts together"
     vars:
       query: "I'm at stop 127N — what trains are coming and are there any service alerts?"
-    assert:
-      - type: javascript
-        value: "output.includes('\"name\":\"get_arrivals\"') && output.includes('\"name\":\"get_alerts\"')"
+    metadata:
+      expect:
+        require:
+          - tool: get_arrivals
+            input: { stop_id: "127N" }
+          - tool: get_alerts
 
   # --- Negative / disambiguation ---
 
   - description: "Negative: off-topic query should not call tools"
     vars:
       query: "What's the weather like in Manhattan today?"
-    assert:
-      - type: javascript
-        value: "!output.includes('\"type\":\"tool_use\"')"
+    metadata:
+      expect:
+        noTools: true
 
   - description: "Negative: ambiguous stop name should search, not get"
     vars:
       query: "Tell me about the Park Place stop"
-    assert:
-      - type: javascript
-        value: "output.includes('\"name\":\"search_stops\"') && !output.includes('\"name\":\"get_stop\"')"
+    metadata:
+      expect:
+        require:
+          - tool: search_stops
+        forbid: [get_stop]
 
   - description: "Negative: arrivals without stop ID should search first"
     vars:
       query: "When's the next train at Fulton Street?"
-    assert:
-      - type: javascript
-        value: "output.includes('\"name\":\"search_stops\"')"
+    metadata:
+      expect:
+        require:
+          - tool: search_stops
