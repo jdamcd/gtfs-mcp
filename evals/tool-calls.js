@@ -106,8 +106,14 @@ export function assertToolCalls(output, context) {
     // Fail loudly: a case without a spec would otherwise pass vacuously.
     return { pass: false, score: 0, reason: "Test case has no metadata.expect" };
   }
-  if (context?.providerResponse?.finishReason === "content_filter") {
+  const finishReason = context?.providerResponse?.finishReason;
+  if (finishReason === "content_filter") {
     return { pass: false, score: 0, reason: "Model refused the request" };
+  }
+  if (finishReason === "length") {
+    // Thinking used up max_tokens before the model got to its tool calls.
+    // Name it so it isn't mistaken for a wrong tool choice.
+    return { pass: false, score: 0, reason: "Response hit max_tokens before finishing" };
   }
   return gradeToolCalls(output, spec);
 }

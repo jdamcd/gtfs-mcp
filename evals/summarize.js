@@ -6,6 +6,7 @@
 // Usage: node evals/summarize.js evals/results/latest.json
 
 import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 // USD per million tokens, first-party API list prices as of 2026-10.
 // promptfoo has no prices for these models, so cost is computed here.
@@ -125,7 +126,7 @@ export function summarize(data) {
   return lines.join("\n");
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const path = process.argv[2];
   if (!path) {
     console.error("Usage: node evals/summarize.js <promptfoo-results.json>");

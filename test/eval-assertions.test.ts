@@ -77,6 +77,14 @@ describe("assertToolCalls", () => {
     };
     expect(assertToolCalls("", context).pass).toBe(false);
   });
+
+  it("names max_tokens truncation instead of reporting a wrong tool", () => {
+    const context = {
+      test: { metadata: { expect: { require: [{ tool: "get_alerts" }] } } },
+      providerResponse: { finishReason: "length" },
+    };
+    expect(assertToolCalls("", context).reason).toContain("max_tokens");
+  });
 });
 
 describe("summarize", () => {
