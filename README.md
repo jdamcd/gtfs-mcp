@@ -140,13 +140,17 @@ npm test
 
 ### Evals
 
-LLM evals use [promptfoo](https://promptfoo.dev/) to verify that a model selects the correct tools for natural-language transit queries. Requires `ANTHROPIC_API_KEY` set in `.env` or the environment.
+LLM evals use [promptfoo](https://promptfoo.dev/) to verify that a model selects the correct tools for natural-language transit queries. Each case runs against Claude Haiku 5.5, Sonnet 5.5 and Opus 5.5 with identical settings. Requires `ANTHROPIC_API_KEY` and `GTFS_MCP_CONFIG` set in `.env` or the environment.
 
 ```bash
 npm run build
-npm run eval
-npm run eval:view   # web UI to inspect results
+npm run eval:smoke    # one pass on Haiku only: cheap check that the setup works
+npm run eval          # all models, 3 repeats each, then prints a summary
+npm run eval:summary  # re-print the summary for the last full run
+npm run eval:view     # web UI to inspect individual responses
 ```
+
+The summary reports each model's pass rate with a 95% confidence interval, which cases pass inconsistently across repeats, token usage and estimated cost. API errors (rate limits, timeouts) are counted separately and don't affect pass rates.
 
 ### MCP inspector
 

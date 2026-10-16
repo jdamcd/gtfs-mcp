@@ -16,8 +16,10 @@
     "start:http": "GTFS_MCP_TRANSPORT=http node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "eval": "promptfoo eval --no-cache",
-    "eval:view": "promptfoo view"
+    "eval": "promptfoo eval --no-cache --repeat 3 -o evals/results/latest.json; node evals/summarize.js evals/results/latest.json",
+    "eval:view": "promptfoo view",
+    "eval:smoke": "promptfoo eval --no-cache --filter-providers haiku -o evals/results/smoke.json; node evals/summarize.js evals/results/smoke.json",
+    "eval:summary": "node evals/summarize.js evals/results/latest.json"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
