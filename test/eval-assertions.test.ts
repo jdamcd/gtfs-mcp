@@ -97,6 +97,36 @@ describe("assertToolCalls", () => {
     };
     expect(assertToolCalls("", context).reason).toContain("max_tokens");
   });
+
+  it("passes when only the final answer was truncated", () => {
+    const context = {
+      test: { metadata: { expect: { require: [{ tool: "get_alerts" }] } } },
+      providerResponse: {
+        finishReason: "length",
+        metadata: { toolCalls: [{ name: "get_alerts", input: { system: "mta-subway" } }] },
+      },
+    };
+    expect(assertToolCalls("", context).pass).toBe(true);
+  });
+
+  it("doesn't count a required call made with a guessed system", () => {
+    const context = (toolCalls: object[]) => ({
+      test: { metadata: { system: "mta-subway", expect: { require: [{ tool: "get_arrivals", input: { stop_id: "127N" } }] } } },
+      providerResponse: { metadata: { toolCalls } },
+    });
+    const guessed = { name: "get_arrivals", input: { system: "nyc", stop_id: "127N" }, is_error: true };
+    const found = { name: "get_arrivals", input: { system: "mta-subway", stop_id: "127N" } };
+    expect(assertToolCalls("", context([guessed])).pass).toBe(false);
+    expect(assertToolCalls("", context([guessed, { name: "list_systems", input: {} }, found])).pass).toBe(true);
+  });
+
+  it("doesn't apply the system check to tools without a system argument", () => {
+    const context = {
+      test: { metadata: { system: "mta-subway", expect: { require: [{ tool: "list_systems" }] } } },
+      providerResponse: { metadata: { toolCalls: [{ name: "list_systems", input: {} }] } },
+    };
+    expect(assertToolCalls("", context).pass).toBe(true);
+  });
 });
 
 describe("summarize", () => {
@@ -123,10 +153,13 @@ describe("summarize", () => {
           row("haiku", "A", false),
           { ...row("haiku", "A", false, 2), gradingResult: null, error: "429" },
           row("opus", "A", true),
+          { ...row("sonnet", "A", false, 2), gradingResult: null, error: "429" },
         ],
       },
     });
     expect(report).toContain("| haiku | 50.0% |");
+    // No graded runs means no data, not a certain 0%.
+    expect(report).toContain("| sonnet | - | - | 0 | 1 |");
     expect(report).toContain("1/2 ⚠️ (+1 err)");
     expect(report).toContain("missing get_stop");
   });

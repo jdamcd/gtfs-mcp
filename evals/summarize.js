@@ -100,7 +100,7 @@ export function summarize(data) {
     const sorted = [...m.latencies].sort((a, b) => a - b);
     const p50 = sorted.length ? `${(sorted[Math.floor(sorted.length / 2)] / 1000).toFixed(1)}s` : "-";
     lines.push(
-      `| ${label} | ${m.graded ? pct(m.passes / m.graded) : "-"} | ${pct(lo)}–${pct(hi)} | ${m.graded} | ${m.errors} | ${m.input} | ${m.output} | ${Number.isFinite(cost) ? `$${cost.toFixed(3)}` : "unknown"} | ${p50} |`,
+      `| ${label} | ${m.graded ? pct(m.passes / m.graded) : "-"} | ${m.graded ? `${pct(lo)}–${pct(hi)}` : "-"} | ${m.graded} | ${m.errors} | ${m.input} | ${m.output} | ${Number.isFinite(cost) ? `$${cost.toFixed(3)}` : "unknown"} | ${p50} |`,
     );
   }
   lines.push("", `Total estimated cost: $${totalCost.toFixed(3)}`, "");

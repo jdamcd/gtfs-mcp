@@ -24,8 +24,9 @@ function valueMatches(actual, expected) {
   return actual === expected;
 }
 
-function callMatches(call, spec) {
+function callMatches(call, spec, system) {
   if (call.name !== spec.tool) return false;
+  if (system !== undefined && "system" in call.input && call.input.system !== system) return false;
   return Object.entries(spec.input ?? {}).every(([key, expected]) =>
     valueMatches(call.input[key], expected),
   );
@@ -47,6 +48,9 @@ function describeCall(call) {
  *   { tool, input? } or { anyOf: [{ tool, input? }, ...] }. `input` lists
  *   argument values that must match exactly (numbers within a small tolerance).
  *   A call the tool rejected still counts: the model chose correctly.
+ * spec.system: if set, a call made with a different `system` doesn't satisfy
+ *   a requirement, so a guessed system ID can't pass. assertToolCalls fills
+ *   it from metadata.system, which defaultTest sets once for every case.
  * spec.order: list of [first, then] tool-name pairs. `then` must not be called
  *   before `first` has been, e.g. to check an ID was looked up, not guessed.
  *   Holds trivially if `then` is never called; use require to make it required.
@@ -63,7 +67,7 @@ export function gradeToolCalls(calls, spec) {
   }
   for (const req of spec.require ?? []) {
     const options = req.anyOf ?? [req];
-    if (!calls.some((call) => options.some((opt) => callMatches(call, opt)))) {
+    if (!calls.some((call) => options.some((opt) => callMatches(call, opt, spec.system)))) {
       failures.push(`missing ${options.map(describeSpec).join(" or ")}`);
     }
   }
@@ -91,7 +95,8 @@ export function gradeToolCalls(calls, spec) {
  * expects.
  */
 export function assertToolCalls(output, context) {
-  const spec = context?.test?.metadata?.expect;
+  const metadata = context?.test?.metadata;
+  const spec = metadata?.expect;
   if (!spec) {
     // Fail loudly: a case without a spec would otherwise pass vacuously.
     return { pass: false, score: 0, reason: "Test case has no metadata.expect" };
@@ -100,10 +105,15 @@ export function assertToolCalls(output, context) {
   if (finishReason === "content_filter") {
     return { pass: false, score: 0, reason: "Model refused the request" };
   }
-  if (finishReason === "length") {
-    // Thinking used up max_tokens before the model finished its turn. Name it
-    // so it isn't mistaken for a wrong tool choice.
-    return { pass: false, score: 0, reason: "Response hit max_tokens before finishing" };
+  const result = gradeToolCalls(executedToolCalls(context?.providerResponse), {
+    system: metadata.system,
+    ...spec,
+  });
+  // Running out of tokens while writing the final answer doesn't matter if
+  // the calls were right. When they weren't, name it so it isn't mistaken for
+  // a wrong tool choice.
+  if (!result.pass && finishReason === "length") {
+    return { ...result, reason: `Response hit max_tokens before finishing. ${result.reason}` };
   }
-  return gradeToolCalls(executedToolCalls(context?.providerResponse), spec);
+  return result;
 }

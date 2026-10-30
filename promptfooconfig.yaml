@@ -57,6 +57,10 @@ providers:
 # Cases declare the calls they expect in `metadata.expect` (require / order /
 # noTools); the format is documented on gradeToolCalls in evals/tool-calls.js.
 defaultTest:
+  metadata:
+    # The system the model should find with list_systems. Required calls only
+    # count if they use it.
+    system: mta-subway
   assert:
     - type: javascript
       value: file://evals/tool-calls.js:assertToolCalls
