@@ -68,7 +68,9 @@ async function doImport(
 
   // importGtfs drops every table before it downloads anything, so it can't
   // run against the live DB: a failed download would leave nothing to serve.
-  const tmpPath = `${dbPath}.tmp`;
+  // The scratch file is per process because several servers can share a
+  // data_dir (one per eval provider, or two clients) and refresh at once.
+  const tmpPath = `${dbPath}.${process.pid}.tmp`;
   const { url, headers } = applyAuth(system.schedule_url, system.auth);
 
   console.error(`[gtfs-mcp] Importing GTFS data for ${system.name}...`);

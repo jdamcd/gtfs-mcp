@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync, utimesSync } from "node:fs";
+import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync, readdirSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { SystemConfig } from "../src/config.js";
@@ -14,6 +14,11 @@ const { importGtfs, openDb } = await import("gtfs");
 const { ensureGtfsLoaded, getDb } = await import("../src/gtfs/static.js");
 
 const TMP_ROOT = "/tmp/gtfs-mcp-test/static";
+
+function scratchFiles(systemId: string): string[] {
+  const dir = join(TMP_ROOT, systemId);
+  return existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".tmp")) : [];
+}
 
 function makeSystem(): SystemConfig {
   return {
@@ -49,7 +54,7 @@ describe("ensureGtfsLoaded", () => {
 
     await expect(ensureGtfsLoaded(system, TMP_ROOT, 24)).rejects.toThrow("network error");
     expect(existsSync(dbPath)).toBe(false);
-    expect(existsSync(`${dbPath}.tmp`)).toBe(false);
+    expect(scratchFiles(system.id)).toEqual([]);
   });
 
   it("keeps serving the existing DB when a refresh fails", async () => {
@@ -75,7 +80,7 @@ describe("ensureGtfsLoaded", () => {
 
     await expect(ensureGtfsLoaded(system, TMP_ROOT, 0)).rejects.toThrow("network error");
     expect(readFileSync(dbPath, "utf8")).toBe("good");
-    expect(existsSync(`${dbPath}.tmp`)).toBe(false);
+    expect(scratchFiles(system.id)).toEqual([]);
     expect(getDb(system, TMP_ROOT)).toBe(live);
     expect(live.close).not.toHaveBeenCalled();
   });
@@ -96,6 +101,49 @@ describe("ensureGtfsLoaded", () => {
       // openDb won't find a real file; we only care that importGtfs was re-invoked
     }
     expect(vi.mocked(importGtfs)).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves another process's in-progress import alone when its own fails", async () => {
+    const system = makeSystem();
+    const dbPath = join(TMP_ROOT, system.id, "gtfs.db");
+    const realPid = process.pid;
+    const setPid = (pid: number) => Object.defineProperty(process, "pid", { value: pid, configurable: true });
+
+    // A fresh module copy has its own import lock, like a separate server.
+    let releaseFirst!: () => void;
+    const firstStarted = new Promise<void>((started) => {
+      vi.mocked(importGtfs)
+        .mockImplementationOnce(async ({ sqlitePath }: any) => {
+          writeFileSync(sqlitePath, "first, half done");
+          started();
+          await new Promise<void>((r) => (releaseFirst = r));
+          writeFileSync(sqlitePath, "first, complete");
+        })
+        .mockImplementationOnce(async ({ sqlitePath }: any) => {
+          writeFileSync(sqlitePath, "second, partial junk");
+          throw new Error("network error");
+        });
+    });
+
+    try {
+      setPid(1001);
+      const first = ensureGtfsLoaded(system, TMP_ROOT, 24);
+      await firstStarted;
+
+      setPid(1002);
+      vi.resetModules();
+      const secondServer = await import("../src/gtfs/static.js");
+      await expect(secondServer.ensureGtfsLoaded(system, TMP_ROOT, 24)).rejects.toThrow("network error");
+      const scratchContents = scratchFiles(system.id).map((f) => readFileSync(join(TMP_ROOT, system.id, f), "utf8"));
+      expect(scratchContents).toEqual(["first, half done"]);
+
+      releaseFirst();
+      await first;
+      expect(readFileSync(dbPath, "utf8")).toBe("first, complete");
+      expect(scratchFiles(system.id)).toEqual([]);
+    } finally {
+      setPid(realPid);
+    }
   });
 
   it("ignores missing file when cleaning up after failure", async () => {
@@ -126,7 +174,7 @@ describe("ensureGtfsLoaded", () => {
     await ensureGtfsLoaded(system, TMP_ROOT, 0);
 
     expect(readFileSync(dbPath, "utf8")).toBe("gen2");
-    expect(existsSync(`${dbPath}.tmp`)).toBe(false);
+    expect(scratchFiles(system.id)).toEqual([]);
     // The old connection was released through closeDb, and the next getDb
     // opens the new file rather than returning the stale instance.
     expect(closeSpy).toHaveBeenCalled();
