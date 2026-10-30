@@ -59,10 +59,16 @@ LLM evals use [promptfoo](https://promptfoo.dev/) to test that a model selects t
 
 ```bash
 npm run build          # evals run against dist/
-npm run eval           # run all eval cases (requires ANTHROPIC_API_KEY)
+npm run eval:smoke     # single pass on Haiku 5.5 only
+npm run eval           # Haiku/Sonnet/Opus 5.5 × 3 repeats, then prints a summary (requires ANTHROPIC_API_KEY)
+npm run eval:summary   # re-print the summary of evals/results/latest.json
 npm run eval:view      # open web UI to inspect results
 ```
 
-Set `ANTHROPIC_API_KEY` and `GTFS_MCP_CONFIG` in `.env` (gitignored) or as environment variables. Evals use `config.mta.json` for live MTA data.
+promptfoo runs the full tool loop: it executes each MCP tool call against the real server and feeds the result back until the model answers (capped by `max_tool_calls`). Each case is graded by `evals/tool-calls.js`, which reads the calls promptfoo recorded in `response.metadata.toolCalls` and checks them against the case's `metadata.expect` (`require`, `order`, `noTools`). A required call only counts if it uses the system set once in `defaultTest.metadata.system`. Don't grade the output text: it's only the final answer, and it can name a tool the model never called. `evals/run.js` wraps `promptfoo eval` so the summary prints even when cases fail while the exit status stays promptfoo's (100 when any case fails). `evals/summarize.js` turns the results file into a per-model comparison (Wilson 95% CI, per-case consistency across repeats, tokens, cost from its own price table, since promptfoo has no prices for the 5.5 models). Both are unit-tested in `test/eval-assertions.test.ts`.
 
-**Limitation:** promptfoo's Anthropic provider only supports single-turn tool calling, so multi-step flows (discovery + target call) can't be evaluated end-to-end. The eval system prompt pre-supplies the `mta-subway` system ID so we can test target-tool selection in isolation. Real clients (Claude Desktop) get discovery guidance from the MCP server's `instructions` field instead.
+All providers share one config (YAML anchor) so only the model varies. `thinking: adaptive` must stay set: without it promptfoo sends `temperature: 0`, which the 5.5 models reject. `effort` is pinned to `medium` because the per-model defaults differ.
+
+Set `ANTHROPIC_API_KEY` and `GTFS_MCP_CONFIG` in `.env` (gitignored) or as environment variables. Evals use `config.mta.json`, so tools run against live MTA data: assert on the calls, not on what they return.
+
+The eval system prompt doesn't name the system, so the model has to discover it with `list_systems`. promptfoo doesn't pass the server's `instructions` to the model the way Claude Desktop does, so evals only test what the tool descriptions get across.
