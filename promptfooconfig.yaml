@@ -1,17 +1,16 @@
 description: "GTFS MCP tools evaluation"
 
-# promptfoo's Anthropic provider is single-turn, so the model can't follow the
-# server's instructions to call list_systems first and still reach the target
-# tool. This system prompt pre-supplies the system_id so we can evaluate
-# target-tool selection in isolation; real clients (Claude Desktop) get the
-# discovery flow via the MCP server's `instructions` field.
+# The system prompt doesn't name the system: the model has to discover it with
+# list_systems, as it would in a real client. Unlike Claude Desktop, promptfoo
+# doesn't pass the server's `instructions` to the model, so it only has the
+# tool descriptions to go on.
 prompts:
   - id: "transit-query"
     raw: |
       [
         {
           "role": "system",
-          "content": "You are a transit assistant with access to GTFS tools. The available transit system has id 'mta-subway' (MTA New York City Subway). Always use this system_id when calling tools. Use the tools to answer queries — do not rely on your own knowledge."
+          "content": "You are a transit assistant with access to GTFS tools. Use the tools to answer queries — do not rely on your own knowledge."
         },
         {
           "role": "user",
@@ -27,6 +26,11 @@ prompts:
 # - showThinking: false, because thinking text is omitted by default on these
 #   models and each output would otherwise carry an empty block with a long
 #   signature, cluttering the results view.
+# - max_tool_calls caps the tool loop promptfoo runs against the real server
+#   (and so live feeds). promptfoo's default of 8 cut off Opus while it was
+#   still legitimately looking up stops, so it's raised to only catch runaway
+#   loops. A run that hits it is a provider error, which the summary counts as
+#   a failure rather than leaving it out.
 providers:
   - id: anthropic:messages:claude-haiku-5-5
     label: haiku-5.5
@@ -36,6 +40,7 @@ providers:
       effort: medium
       max_tokens: 4096
       showThinking: false
+      max_tool_calls: 20
       mcp:
         enabled: true
         server:
@@ -49,7 +54,7 @@ providers:
     label: opus-5.5
     config: *model_config
 
-# Cases declare the calls they expect in `metadata.expect` (require / forbid /
+# Cases declare the calls they expect in `metadata.expect` (require / order /
 # noTools); the format is documented on gradeToolCalls in evals/tool-calls.js.
 defaultTest:
   assert:
@@ -106,13 +111,9 @@ tests:
       query: "What stops does the 1 train make going northbound?"
     metadata:
       expect:
-        # Accept either the direct get_route call or a list_routes discovery
-        # step first — the tool description encourages looking up route_ids by
-        # name when unknown, which is the more robust flow in multi-turn use.
         require:
-          - anyOf:
-              - tool: get_route
-              - tool: list_routes
+          - tool: get_route
+            input: { route_id: "1" }
 
   - description: "Arrivals: upcoming trains at a stop"
     vars:
@@ -136,12 +137,9 @@ tests:
       query: "Where are all the 1 train cars right now?"
     metadata:
       expect:
-        # Same reasoning as the get_route case: accept a list_routes discovery
-        # step in place of the direct call.
         require:
-          - anyOf:
-              - tool: get_vehicles
-              - tool: list_routes
+          - tool: get_vehicles
+            input: { route_id: "1" }
 
   - description: "Trips: look up specific trip"
     vars:
@@ -188,12 +186,18 @@ tests:
       expect:
         require:
           - tool: search_stops
-        forbid: [get_stop]
+        # Looking the stop up after searching is fine; guessing its ID isn't.
+        order:
+          - [search_stops, get_stop]
 
   - description: "Negative: arrivals without stop ID should search first"
     vars:
       query: "When's the next train at Fulton Street?"
     metadata:
       expect:
+        # get_arrivals isn't required: there are five Fulton St stations, so
+        # asking which one is a good answer too.
         require:
           - tool: search_stops
+        order:
+          - [search_stops, get_arrivals]

@@ -1,31 +1,17 @@
-// promptfoo's Anthropic provider renders a response containing tool_use blocks
-// as its content blocks joined by blank lines, with each tool_use block as a
-// single-line JSON object. We parse those blocks rather than substring-matching
-// the raw output: newer models may escape tool inputs differently, and a
-// substring match can also hit text the model wrote about a tool it never
-// actually called.
+// promptfoo runs the MCP tool loop itself and records each call it executed,
+// in order, on the response metadata. We grade those rather than the output
+// text: the final answer only describes what the model did, and a substring
+// match can hit text the model wrote about a tool it never actually called.
 
 /**
- * @param {unknown} output
- * @returns {{ name: string, input: Record<string, unknown> }[]}
+ * @returns {{ name: string, input: Record<string, unknown>, isError: boolean }[]}
  */
-export function parseToolCalls(output) {
-  if (typeof output !== "string") return [];
-  const calls = [];
-  for (const chunk of output.split("\n\n")) {
-    const trimmed = chunk.trim();
-    if (!trimmed.startsWith("{")) continue;
-    let block;
-    try {
-      block = JSON.parse(trimmed);
-    } catch {
-      continue;
-    }
-    if (block?.type === "tool_use" && typeof block.name === "string") {
-      calls.push({ name: block.name, input: block.input ?? {} });
-    }
-  }
-  return calls;
+export function executedToolCalls(providerResponse) {
+  const calls = providerResponse?.metadata?.toolCalls;
+  if (!Array.isArray(calls)) return [];
+  return calls
+    .filter((c) => typeof c?.name === "string")
+    .map((c) => ({ name: c.name, input: c.input ?? {}, isError: Boolean(c.is_error) }));
 }
 
 const COORD_TOLERANCE = 1e-4;
@@ -50,22 +36,26 @@ function describeSpec(spec) {
   return `${spec.tool}${input}`;
 }
 
+function describeCall(call) {
+  return `${call.name} ${JSON.stringify(call.input)}${call.isError ? " (error)" : ""}`;
+}
+
 /**
  * Spec format (the source of truth for promptfooconfig.yaml's metadata.expect):
  *
  * spec.require: list of requirements, all of which must hold. Each is either
  *   { tool, input? } or { anyOf: [{ tool, input? }, ...] }. `input` lists
  *   argument values that must match exactly (numbers within a small tolerance).
- * spec.forbid: tool names that must not be called.
+ *   A call the tool rejected still counts: the model chose correctly.
+ * spec.order: list of [first, then] tool-name pairs. `then` must not be called
+ *   before `first` has been, e.g. to check an ID was looked up, not guessed.
+ *   Holds trivially if `then` is never called; use require to make it required.
  * spec.noTools: if true, the response must not call any tool.
  *
  * @returns {{ pass: boolean, score: number, reason: string }}
  */
-export function gradeToolCalls(output, spec) {
-  const calls = parseToolCalls(output);
-  const called = calls.length
-    ? calls.map((c) => `${c.name} ${JSON.stringify(c.input)}`).join("; ")
-    : "(none)";
+export function gradeToolCalls(calls, spec) {
+  const called = calls.length ? calls.map(describeCall).join(" → ") : "(none)";
   const failures = [];
 
   if (spec.noTools && calls.length > 0) {
@@ -77,9 +67,11 @@ export function gradeToolCalls(output, spec) {
       failures.push(`missing ${options.map(describeSpec).join(" or ")}`);
     }
   }
-  for (const name of spec.forbid ?? []) {
-    if (calls.some((call) => call.name === name)) {
-      failures.push(`unexpected ${name}`);
+  for (const [first, then] of spec.order ?? []) {
+    const firstAt = calls.findIndex((call) => call.name === first);
+    const thenAt = calls.findIndex((call) => call.name === then);
+    if (thenAt !== -1 && (firstAt === -1 || thenAt < firstAt)) {
+      failures.push(`${then} before ${first}`);
     }
   }
 
@@ -109,9 +101,9 @@ export function assertToolCalls(output, context) {
     return { pass: false, score: 0, reason: "Model refused the request" };
   }
   if (finishReason === "length") {
-    // Thinking used up max_tokens before the model got to its tool calls.
-    // Name it so it isn't mistaken for a wrong tool choice.
+    // Thinking used up max_tokens before the model finished its turn. Name it
+    // so it isn't mistaken for a wrong tool choice.
     return { pass: false, score: 0, reason: "Response hit max_tokens before finishing" };
   }
-  return gradeToolCalls(output, spec);
+  return gradeToolCalls(executedToolCalls(context?.providerResponse), spec);
 }

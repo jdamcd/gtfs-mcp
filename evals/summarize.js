@@ -45,7 +45,11 @@ export function summarize(data) {
     const label = r.provider?.label ?? r.provider?.id;
     const id = modelId(r.provider?.id);
     const desc = r.testCase?.description ?? r.description ?? `test ${r.testIdx}`;
-    const isError = r.failureReason === FAILURE_ERROR || Boolean(r.error && !r.gradingResult);
+    // promptfoo reports hitting max_tool_calls as a provider error, but it means
+    // the model kept calling tools, so it's graded as a failure.
+    const hitToolLimit = /exceeded max_tool_calls/.test(r.error ?? r.response?.error ?? "");
+    const isError =
+      !hitToolLimit && (r.failureReason === FAILURE_ERROR || Boolean(r.error && !r.gradingResult));
 
     let m = models.get(label);
     if (!m) {
@@ -74,6 +78,8 @@ export function summarize(data) {
     if (r.success) {
       m.passes++;
       c.passes++;
+    } else if (hitToolLimit) {
+      c.reasons.add("hit max_tool_calls");
     } else if (r.gradingResult?.reason) {
       c.reasons.add(r.gradingResult.reason);
     }

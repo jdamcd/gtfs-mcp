@@ -1,71 +1,83 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error -- plain JS module used by promptfoo
-import { assertToolCalls, gradeToolCalls, parseToolCalls } from "../evals/tool-calls.js";
+import { assertToolCalls, executedToolCalls, gradeToolCalls } from "../evals/tool-calls.js";
 // @ts-expect-error -- plain JS module used by promptfoo
 import { summarize, wilson } from "../evals/summarize.js";
 
-// Mirrors how promptfoo's Anthropic provider renders a response with tool use:
-// text blocks verbatim, tool_use blocks as JSON, joined by blank lines.
-function render(...blocks: Array<string | { name: string; input: object }>): string {
-  return blocks
-    .map((b) =>
-      typeof b === "string"
-        ? b
-        : JSON.stringify({ type: "tool_use", id: "toolu_1", name: b.name, input: b.input }),
-    )
-    .join("\n\n");
-}
+const call = (name: string, input: object = {}, isError = false) => ({ name, input, isError });
 
-describe("parseToolCalls", () => {
-  it("extracts tool_use blocks and ignores text", () => {
-    const output = render(
-      "Let me check get_stop for you.",
-      { name: "get_arrivals", input: { system: "mta-subway", stop_id: "127N" } },
-    );
-    expect(parseToolCalls(output)).toEqual([
-      { name: "get_arrivals", input: { system: "mta-subway", stop_id: "127N" } },
+describe("executedToolCalls", () => {
+  it("reads the calls promptfoo recorded on the response, in order", () => {
+    const providerResponse = {
+      output: "The next 1 train is due now.",
+      metadata: {
+        toolCalls: [
+          { id: "t1", name: "search_stops", input: { query: "Fulton" }, output: "[]", is_error: false },
+          { id: "t2", name: "get_trip", input: { trip_id: "x" }, output: "Trip not found", is_error: true },
+        ],
+      },
+    };
+    expect(executedToolCalls(providerResponse)).toEqual([
+      call("search_stops", { query: "Fulton" }),
+      call("get_trip", { trip_id: "x" }, true),
     ]);
   });
 
-  it("handles escaped characters in tool inputs", () => {
-    const output = '{"type":"tool_use","id":"t","name":"search_stops","input":{"query":"Times Sq\\u002f42 St"}}';
-    expect(parseToolCalls(output)[0].input.query).toBe("Times Sq/42 St");
-  });
-
-  it("returns no calls for non-string output", () => {
-    expect(parseToolCalls(undefined)).toEqual([]);
+  it("returns no calls when the model answered without tools", () => {
+    expect(executedToolCalls({ output: "It's sunny." })).toEqual([]);
+    expect(executedToolCalls(undefined)).toEqual([]);
   });
 });
 
 describe("gradeToolCalls", () => {
   it("requires matching tool and input", () => {
-    const output = render({ name: "get_stop", input: { stop_id: "127S" } });
-    const result = gradeToolCalls(output, { require: [{ tool: "get_stop", input: { stop_id: "127N" } }] });
+    const result = gradeToolCalls([call("get_stop", { stop_id: "127S" })], {
+      require: [{ tool: "get_stop", input: { stop_id: "127N" } }],
+    });
     expect(result.pass).toBe(false);
     expect(result.reason).toContain("missing get_stop");
   });
 
-  it("does not pass on a tool name that only appears in text", () => {
-    const output = "I would call get_alerts, but I won't.";
-    expect(gradeToolCalls(output, { require: [{ tool: "get_alerts" }] }).pass).toBe(false);
+  it("counts a call the tool rejected, and marks it in the reason", () => {
+    const result = gradeToolCalls([call("get_trip", { trip_id: "x" }, true)], { require: [{ tool: "get_trip" }] });
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain("(error)");
   });
 
   it("compares numbers with a tolerance and accepts numeric strings", () => {
-    const output = render({ name: "find_nearby_stops", input: { lat: "40.7580", lon: -73.98551 } });
+    const calls = [call("find_nearby_stops", { lat: "40.7580", lon: -73.98551 })];
     const spec = { require: [{ tool: "find_nearby_stops", input: { lat: 40.758, lon: -73.9855 } }] };
-    expect(gradeToolCalls(output, spec).pass).toBe(true);
+    expect(gradeToolCalls(calls, spec).pass).toBe(true);
   });
 
-  it("supports anyOf, forbid and noTools", () => {
-    const output = render({ name: "list_routes", input: {} }, { name: "get_stop", input: {} });
-    expect(gradeToolCalls(output, { require: [{ anyOf: [{ tool: "get_route" }, { tool: "list_routes" }] }] }).pass).toBe(true);
-    expect(gradeToolCalls(output, { forbid: ["get_stop"] }).pass).toBe(false);
-    expect(gradeToolCalls(output, { noTools: true }).pass).toBe(false);
-    expect(gradeToolCalls("It's sunny.", { noTools: true }).pass).toBe(true);
+  it("supports anyOf and noTools", () => {
+    const calls = [call("list_routes"), call("get_stop")];
+    expect(gradeToolCalls(calls, { require: [{ anyOf: [{ tool: "get_route" }, { tool: "list_routes" }] }] }).pass).toBe(true);
+    expect(gradeToolCalls(calls, { noTools: true }).pass).toBe(false);
+    expect(gradeToolCalls([], { noTools: true }).pass).toBe(true);
+  });
+
+  it("checks order across the whole loop", () => {
+    const spec = { order: [["search_stops", "get_stop"]] };
+    expect(gradeToolCalls([call("search_stops"), call("get_stop")], spec).pass).toBe(true);
+    expect(gradeToolCalls([call("search_stops")], spec).pass).toBe(true);
+
+    const guessed = gradeToolCalls([call("get_stop"), call("search_stops"), call("get_stop")], spec);
+    expect(guessed.pass).toBe(false);
+    expect(guessed.reason).toContain("get_stop before search_stops");
+    expect(gradeToolCalls([call("get_stop")], spec).pass).toBe(false);
   });
 });
 
 describe("assertToolCalls", () => {
+  it("grades the recorded calls, not tool names in the answer text", () => {
+    const context = {
+      test: { metadata: { expect: { require: [{ tool: "get_alerts" }] } } },
+      providerResponse: { output: "I would call get_alerts, but I won't." },
+    };
+    expect(assertToolCalls("I would call get_alerts, but I won't.", context).pass).toBe(false);
+  });
+
   it("fails a case with no spec instead of passing vacuously", () => {
     expect(assertToolCalls("", { test: {} }).pass).toBe(false);
   });
@@ -117,5 +129,26 @@ describe("summarize", () => {
     expect(report).toContain("| haiku | 50.0% |");
     expect(report).toContain("1/2 ⚠️ (+1 err)");
     expect(report).toContain("missing get_stop");
+  });
+
+  it("grades hitting max_tool_calls as a failure, not an error", () => {
+    const report = summarize({
+      results: {
+        results: [
+          {
+            provider: { id: "anthropic:messages:claude-haiku-5-5", label: "haiku" },
+            testCase: { description: "A" },
+            success: false,
+            failureReason: 2,
+            gradingResult: null,
+            error: "Anthropic MCP tool execution exceeded max_tool_calls=8. Increase provider config.max_tool_calls if this evaluation legitimately needs more tool calls.",
+            response: { tokenUsage: { prompt: 1000, completion: 100 } },
+          },
+        ],
+      },
+    });
+    expect(report).toContain("| haiku | 0.0% |");
+    expect(report).toContain("0/1 ❌");
+    expect(report).toContain("hit max_tool_calls");
   });
 });
