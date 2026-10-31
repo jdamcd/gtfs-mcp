@@ -64,6 +64,7 @@ export function createHttpMcpServer(config: AppConfig): HttpMcpServer {
 
   function isAllowedHost(host: string | undefined, port: number): boolean {
     if (!host) return false;
+    if (hostsOverride?.includes("*")) return true;
     return (hostsOverride ?? getDefaults(port).hosts).includes(host);
   }
 
@@ -71,6 +72,7 @@ export function createHttpMcpServer(config: AppConfig): HttpMcpServer {
     // Non-browser MCP clients (Claude Desktop, etc.) omit Origin; only
     // browser-driven requests carry one and only those are DNS-rebinding targets.
     if (origin === undefined) return true;
+    if (originsOverride?.includes("*")) return true;
     return (originsOverride ?? getDefaults(port).origins).includes(origin);
   }
 
