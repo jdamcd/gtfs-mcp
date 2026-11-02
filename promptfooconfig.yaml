@@ -66,32 +66,7 @@ defaultTest:
       value: file://evals/tool-calls.js:assertToolCalls
 
 tests:
-  # --- Tool selection: basic coverage ---
-
-  - description: "Systems: discover available systems"
-    vars:
-      query: "What subway networks can I query?"
-    metadata:
-      expect:
-        require:
-          - tool: list_systems
-
-  - description: "Stops: search by name"
-    vars:
-      query: "I'm trying to find stops around Grand Central"
-    metadata:
-      expect:
-        require:
-          - tool: search_stops
-
-  - description: "Stops: find near coordinates"
-    vars:
-      query: "What subway stops are near latitude 40.7580, longitude -73.9855?"
-    metadata:
-      expect:
-        require:
-          - tool: find_nearby_stops
-            input: { lat: 40.758, lon: -73.9855 }
+  # --- Single call: right tool, right arguments ---
 
   - description: "Stops: get details by ID"
     vars:
@@ -101,14 +76,6 @@ tests:
         require:
           - tool: get_stop
             input: { stop_id: "127N" }
-
-  - description: "Routes: list all"
-    vars:
-      query: "What routes are in the system?"
-    metadata:
-      expect:
-        require:
-          - tool: list_routes
 
   - description: "Routes: get details with direction"
     vars:
@@ -121,7 +88,7 @@ tests:
 
   - description: "Arrivals: upcoming trains at a stop"
     vars:
-      query: "When is the next train arriving at stop 127N?"
+      query: "When is the next train at stop 127N?"
     metadata:
       expect:
         require:
@@ -136,23 +103,25 @@ tests:
         require:
           - tool: get_alerts
 
+  - description: "Alerts: planned work"
+    vars:
+      query: "Is any planned work coming up on the L?"
+    metadata:
+      expect:
+        require:
+          - tool: get_alerts
+            input: { route_id: "L", include_inactive: true }
+
   - description: "Vehicles: track positions with route filter"
     vars:
-      query: "Where are all the 1 train cars right now?"
+      query: "Where are the 1 trains right now?"
     metadata:
+      # config.mta.json has no vehicle positions feed, so get_vehicles always
+      # errors here. This only checks that the model picks it.
       expect:
         require:
           - tool: get_vehicles
             input: { route_id: "1" }
-
-  - description: "Trips: look up specific trip"
-    vars:
-      query: "Can you pull up the details for trip 075850_1..N03R?"
-    metadata:
-      expect:
-        require:
-          - tool: get_trip
-            input: { trip_id: "075850_1..N03R" }
 
   - description: "Feed health diagnostics"
     vars:
@@ -162,28 +131,33 @@ tests:
         require:
           - tool: get_feed_health
 
-  # --- Multi-tool ---
+  # --- Chains: IDs and coordinates must come from an earlier result ---
 
-  - description: "Multi-tool: arrivals + alerts together"
+  - description: "Stops: around a named place"
     vars:
-      query: "I'm at stop 127N — what trains are coming and are there any service alerts?"
+      query: "I'm trying to find stops around Grand Central"
     metadata:
       expect:
         require:
-          - tool: get_arrivals
-            input: { stop_id: "127N" }
-          - tool: get_alerts
+          - tool: search_stops
+          - tool: find_nearby_stops
+        order:
+          - [search_stops, find_nearby_stops]
 
-  # --- Negative / disambiguation ---
-
-  - description: "Negative: off-topic query should not call tools"
+  - description: "Stops: arrivals near coordinates"
     vars:
-      query: "What's the weather like in Manhattan today?"
+      query: "I'm at 40.7584, -73.9530. When's the next train?"
     metadata:
       expect:
-        noTools: true
+        require:
+          - tool: find_nearby_stops
+            input: { lat: 40.7584, lon: -73.953 }
+          - tool: get_arrivals
+            input: { stop_id: "B06" }
+        order:
+          - [find_nearby_stops, get_arrivals]
 
-  - description: "Negative: ambiguous stop name should search, not get"
+  - description: "Stops: name only, should search before get"
     vars:
       query: "Tell me about the Park Place stop"
     metadata:
@@ -194,7 +168,7 @@ tests:
         order:
           - [search_stops, get_stop]
 
-  - description: "Negative: arrivals without stop ID should search first"
+  - description: "Stops: ambiguous name should search before arrivals"
     vars:
       query: "When's the next train at Fulton Street?"
     metadata:
@@ -205,3 +179,49 @@ tests:
           - tool: search_stops
         order:
           - [search_stops, get_arrivals]
+
+  - description: "Routes: find a route by its everyday name"
+    vars:
+      query: "Which stops does the Times Square Shuttle make?"
+    metadata:
+      expect:
+        require:
+          - tool: get_route
+            input: { route_id: "GS" }
+        # The shuttle is listed as "42 St Shuttle", so GS has to come from
+        # list_routes rather than the name.
+        order:
+          - [list_routes, get_route]
+
+  - description: "Trips: follow a train from arrivals"
+    vars:
+      query: "Is the next uptown 1 train from stop 127N running late, and where does it stop?"
+    metadata:
+      expect:
+        require:
+          - tool: get_arrivals
+            input: { stop_id: "127N" }
+          - tool: get_trip
+        order:
+          - [get_arrivals, get_trip]
+
+  # --- Two questions in one ---
+
+  - description: "Multi-tool: arrivals + alerts together"
+    vars:
+      query: "I'm at stop 127 — what trains are coming and are there any service alerts?"
+    metadata:
+      expect:
+        require:
+          - tool: get_arrivals
+            input: { stop_id: "127" }
+          - tool: get_alerts
+
+  # --- Out of scope ---
+
+  - description: "Negative: off-topic query should not call tools"
+    vars:
+      query: "What's the weather like in Manhattan today?"
+    metadata:
+      expect:
+        noTools: true
