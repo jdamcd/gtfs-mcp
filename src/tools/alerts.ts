@@ -49,7 +49,7 @@ export function registerAlertTools(ctx: ToolContext): void {
           .boolean()
           .default(false)
           .describe(
-            "Include alerts whose active_period does not cover the current time"
+            "Include alerts whose active_period does not cover the current time. Pass route_id or this will return every planned alert on the system."
           ),
       },
       outputSchema: AlertsResponseSchema,
