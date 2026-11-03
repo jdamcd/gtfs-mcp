@@ -164,6 +164,27 @@ describe("summarize", () => {
     expect(report).toContain("missing get_stop");
   });
 
+  it("reports mean tool calls over graded runs", () => {
+    const row = (calls: number, error?: string) => ({
+      provider: { id: "anthropic:messages:claude-haiku-5-5", label: "haiku" },
+      testCase: { description: "A" },
+      success: !error,
+      failureReason: error ? 2 : 0,
+      gradingResult: error ? null : { pass: true },
+      error,
+      response: {
+        tokenUsage: { prompt: 1000, completion: 100 },
+        ...(calls ? { metadata: { toolCalls: Array.from({ length: calls }, () => ({ name: "get_stop", input: {} })) } } : {}),
+      },
+    });
+    const report = summarize({
+      results: { results: [row(3), row(0), row(9, "429")] },
+    });
+    // Exclude errored runs
+    expect(report).toMatch(/\| haiku \| 100\.0% \| [^|]+ \| 2 \| 1 \| 1\.5 \|/);
+    expect(report).toContain("| A | 2/2 (+1 err) · 1.5 |");
+  });
+
   it("grades hitting max_tool_calls as a failure, not an error", () => {
     const report = summarize({
       results: {

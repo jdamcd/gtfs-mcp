@@ -8,6 +8,7 @@
 
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { executedToolCalls } from "./tool-calls.js";
 
 // USD per million tokens, first-party API list prices as of 2026-10.
 // promptfoo has no prices for these models, so cost is computed here.
@@ -53,7 +54,7 @@ export function summarize(data) {
 
     let m = models.get(label);
     if (!m) {
-      m = { id, graded: 0, passes: 0, errors: 0, input: 0, output: 0, latencies: [] };
+      m = { id, graded: 0, passes: 0, errors: 0, calls: 0, input: 0, output: 0, latencies: [] };
       models.set(label, m);
     }
     const usage = r.response?.tokenUsage ?? r.tokenUsage ?? {};
@@ -63,7 +64,9 @@ export function summarize(data) {
 
     if (!cases.has(desc)) cases.set(desc, new Map());
     const perModel = cases.get(desc);
-    if (!perModel.has(label)) perModel.set(label, { passes: 0, n: 0, errors: 0, reasons: new Set() });
+    if (!perModel.has(label)) {
+      perModel.set(label, { passes: 0, n: 0, errors: 0, calls: 0, reasons: new Set() });
+    }
     const c = perModel.get(label);
 
     // Infrastructure errors (rate limits, timeouts) say nothing about the
@@ -75,6 +78,9 @@ export function summarize(data) {
     }
     m.graded++;
     c.n++;
+    const calls = executedToolCalls(r.response).length;
+    m.calls += calls;
+    c.calls += calls;
     if (r.success) {
       m.passes++;
       c.passes++;
@@ -90,8 +96,8 @@ export function summarize(data) {
   let totalCost = 0;
 
   lines.push("## Models", "");
-  lines.push("| Model | Pass rate | 95% CI | Graded | Errors | Input tok | Output tok | Est. cost | p50 latency |");
-  lines.push("|---|---|---|---|---|---|---|---|---|");
+  lines.push("| Model | Pass rate | 95% CI | Graded | Errors | Calls/run | Input tok | Output tok | Est. cost | p50 latency |");
+  lines.push("|---|---|---|---|---|---|---|---|---|---|");
   for (const [label, m] of models) {
     const [lo, hi] = wilson(m.passes, m.graded);
     const price = PRICES[m.id];
@@ -100,12 +106,12 @@ export function summarize(data) {
     const sorted = [...m.latencies].sort((a, b) => a - b);
     const p50 = sorted.length ? `${(sorted[Math.floor(sorted.length / 2)] / 1000).toFixed(1)}s` : "-";
     lines.push(
-      `| ${label} | ${m.graded ? pct(m.passes / m.graded) : "-"} | ${m.graded ? `${pct(lo)}–${pct(hi)}` : "-"} | ${m.graded} | ${m.errors} | ${m.input} | ${m.output} | ${Number.isFinite(cost) ? `$${cost.toFixed(3)}` : "unknown"} | ${p50} |`,
+      `| ${label} | ${m.graded ? pct(m.passes / m.graded) : "-"} | ${m.graded ? `${pct(lo)}–${pct(hi)}` : "-"} | ${m.graded} | ${m.errors} | ${m.graded ? (m.calls / m.graded).toFixed(1) : "-"} | ${m.input} | ${m.output} | ${Number.isFinite(cost) ? `$${cost.toFixed(3)}` : "unknown"} | ${p50} |`,
     );
   }
   lines.push("", `Total estimated cost: $${totalCost.toFixed(3)}`, "");
 
-  lines.push("## Cases (passes / graded runs)", "");
+  lines.push("## Cases (passes / graded runs · tool calls per run)", "");
   lines.push(`| Case | ${labels.join(" | ")} |`);
   lines.push(`|---|${labels.map(() => "---").join("|")}|`);
   const failures = [];
@@ -116,7 +122,8 @@ export function summarize(data) {
       const flag = c.n > 0 && c.passes > 0 && c.passes < c.n ? " ⚠️" : c.n > 0 && c.passes === 0 ? " ❌" : "";
       const err = c.errors ? ` (+${c.errors} err)` : "";
       if (c.reasons.size) failures.push({ desc, label, reasons: [...c.reasons] });
-      return `${c.passes}/${c.n}${flag}${err}`;
+      const calls = c.n ? ` · ${(c.calls / c.n).toFixed(1)}` : "";
+      return `${c.passes}/${c.n}${flag}${err}${calls}`;
     });
     lines.push(`| ${desc} | ${cells.join(" | ")} |`);
   }
