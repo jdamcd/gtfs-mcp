@@ -127,7 +127,12 @@ export function summarize(data) {
     });
     lines.push(`| ${desc} | ${cells.join(" | ")} |`);
   }
-  lines.push("", "⚠️ = inconsistent across repeats, ❌ = failed every run", "");
+  const modelStats = [...models.values()];
+  if (modelStats.some((m) => m.passes < m.graded)) {
+    lines.push("", "⚠️ = inconsistent across repeats, ❌ = failed every run", "");
+  } else if (modelStats.length > 0 && modelStats.every((m) => m.errors === 0)) {
+    lines.push("", "✅ All runs passed", "");
+  }
 
   if (failures.length) {
     lines.push("## Failure reasons", "");
