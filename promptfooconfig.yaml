@@ -55,7 +55,8 @@ providers:
     config: *model_config
 
 # Cases declare the calls they expect in `metadata.expect` (require / order /
-# noTools); the format is documented on gradeToolCalls in evals/tool-calls.js.
+# noTools / only); the format is documented on gradeToolCalls in
+# evals/tool-calls.js.
 defaultTest:
   metadata:
     # The system the model should find with list_systems. Required calls only
@@ -225,3 +226,23 @@ tests:
     metadata:
       expect:
         noTools: true
+
+  - description: "Negative: system that isn't configured"
+    vars:
+      query: "When's the next BART train at Embarcadero?"
+    metadata:
+      # Only MTA is configured, so the answer is that BART isn't available,
+      # not a search of MTA's stops.
+      expect:
+        require:
+          - tool: list_systems
+        only: [list_systems]
+
+  - description: "Negative: transit question the tools can't answer"
+    vars:
+      query: "How much does a subway ride cost?"
+    metadata:
+      # The tools don't cover fares (a fare quoted from memory also passes, 
+      # as long as no other tool calls are made).
+      expect:
+        only: [list_systems]

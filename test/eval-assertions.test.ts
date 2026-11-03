@@ -57,6 +57,16 @@ describe("gradeToolCalls", () => {
     expect(gradeToolCalls([], { noTools: true }).pass).toBe(true);
   });
 
+  it("supports only", () => {
+    const spec = { only: ["list_systems"] };
+    expect(gradeToolCalls([], spec).pass).toBe(true);
+    expect(gradeToolCalls([call("list_systems")], spec).pass).toBe(true);
+
+    const wandered = gradeToolCalls([call("list_systems"), call("search_stops"), call("search_stops")], spec);
+    expect(wandered.pass).toBe(false);
+    expect(wandered.reason).toContain("also called search_stops.");
+  });
+
   it("checks order across the whole loop", () => {
     const spec = { order: [["search_stops", "get_stop"]] };
     expect(gradeToolCalls([call("search_stops"), call("get_stop")], spec).pass).toBe(true);

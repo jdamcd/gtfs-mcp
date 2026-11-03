@@ -55,6 +55,7 @@ function describeCall(call) {
  *   before `first` has been, e.g. to check an ID was looked up, not guessed.
  *   Holds trivially if `then` is never called; use require to make it required.
  * spec.noTools: if true, the response must not call any tool.
+ * spec.only: list of tool names. Every call must be to one of them.
  *
  * @returns {{ pass: boolean, score: number, reason: string }}
  */
@@ -64,6 +65,10 @@ export function gradeToolCalls(calls, spec) {
 
   if (spec.noTools && calls.length > 0) {
     failures.push("expected no tool calls");
+  }
+  if (spec.only) {
+    const unexpected = [...new Set(calls.map((call) => call.name))].filter((name) => !spec.only.includes(name));
+    if (unexpected.length) failures.push(`only ${spec.only.join(", ")} expected, also called ${unexpected.join(", ")}`);
   }
   for (const req of spec.require ?? []) {
     const options = req.anyOf ?? [req];
