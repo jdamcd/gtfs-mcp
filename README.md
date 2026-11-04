@@ -108,7 +108,7 @@ Set `auth` to `null` for systems that don't require authentication.
 | `get_stop` | Stop details and routes serving it | `system`, `stop_id` |
 | `get_arrivals` | Upcoming arrivals with realtime delays | `system`, `stop_id`, `route_id?`, `limit?` |
 | `list_routes` | Routes in a system, with optional name filter and pagination | `system`, `query?`, `route_type?`, `limit?`, `offset?` |
-| `get_route` | Route details with ordered stop list | `system`, `route_id`, `direction_id?` |
+| `get_route` | Route details with ordered stops in each direction | `system`, `route_id`, `direction_id?` |
 | `get_alerts` | Active service alerts | `system`, `route_id?`, `stop_id?` |
 | `get_vehicles` | Live vehicle positions | `system`, `route_id?` |
 | `get_trip` | Trip stop sequence with realtime delays | `system`, `trip_id` |

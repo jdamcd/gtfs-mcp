@@ -200,33 +200,33 @@ describe("listRoutes", () => {
 });
 
 describe("getRouteDetails", () => {
-  it("returns route and ordered stops", () => {
+  it("returns both directions, each with its headsign and ordered stops", () => {
     const details = getRouteDetails(db, "R1");
-    expect(details.route).not.toBeNull();
     expect(details.route!.route_id).toBe("R1");
-    expect(details.stops.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it("returns stops in sequence order", () => {
-    const details = getRouteDetails(db, "R1", 0);
-    // Trip T1 (direction 0): S1N -> S2 -> S3
-    const stopIds = details.stops.map((s) => s.stop_id);
-    expect(stopIds).toEqual(["S1N", "S2", "S3"]);
+    expect(
+      details.directions.map((d) => ({
+        direction_id: d.direction_id,
+        headsign: d.headsign,
+        stops: d.stops.map((s) => s.stop_id),
+      }))
+    ).toEqual([
+      // T1 over the 2-stop T4; it ties with T5 on length, and wins on trip_id.
+      { direction_id: 0, headsign: "Uptown", stops: ["S1N", "S2", "S3"] },
+      { direction_id: 1, headsign: "Downtown", stops: ["S3", "S2", "S1S"] },
+    ]);
   });
 
   it("filters by direction_id", () => {
-    const dir0 = getRouteDetails(db, "R1", 0);
     const dir1 = getRouteDetails(db, "R1", 1);
-    // Direction 0 (T1): S1N, S2, S3
-    // Direction 1 (T2): S3, S2, S1S
-    expect(dir0.stops[0].stop_id).toBe("S1N");
-    expect(dir1.stops[0].stop_id).toBe("S3");
+    expect(dir1.directions).toHaveLength(1);
+    expect(dir1.directions[0].direction_id).toBe(1);
+    expect(dir1.directions[0].stops[0].stop_id).toBe("S3");
   });
 
   it("returns null route for invalid route_id", () => {
     const details = getRouteDetails(db, "INVALID");
     expect(details.route).toBeNull();
-    expect(details.stops).toEqual([]);
+    expect(details.directions).toEqual([]);
   });
 });
 

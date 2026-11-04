@@ -85,7 +85,7 @@ export function registerRouteTools(ctx: ToolContext): void {
     {
       title: "Get route details",
       description:
-        "Get a route and an ordered stop list. The stop list is drawn from the route's longest trip variant in the given direction; routes with branches may have service patterns that skip some stops — use get_trip for a specific trip's actual sequence. Pass route_id from list_routes; if only a human name is known, search with list_routes first.",
+        "Get a route and an ordered stop list for each direction, with the direction's headsign. Each stop list is drawn from the route's longest trip variant in that direction; routes with branches may have service patterns that skip some stops — use get_trip for a specific trip's actual sequence. Pass route_id from list_routes; if only a human name is known, search with list_routes first.",
       inputSchema: {
         system: z.string().describe("System ID, from list_systems"),
         route_id: z.string().describe("Route ID, from list_routes"),
@@ -93,7 +93,7 @@ export function registerRouteTools(ctx: ToolContext): void {
           .union([z.literal(0), z.literal(1)])
           .optional()
           .describe(
-            "Agency-defined direction 0 or 1 (semantics vary — call without this to see both)"
+            "Agency-defined direction 0 or 1 (semantics vary — call without this to see both, each with its headsign)"
           ),
       },
       outputSchema: RouteDetailsResponseSchema,
@@ -123,11 +123,15 @@ export function registerRouteTools(ctx: ToolContext): void {
           type: details.route.route_type,
           color: details.route.route_color,
         },
-        stops: details.stops.map((s) => ({
-          stop_id: s.stop_id,
-          name: s.stop_name,
-          lat: s.stop_lat,
-          lon: s.stop_lon,
+        directions: details.directions.map((d) => ({
+          direction_id: d.direction_id,
+          headsign: d.headsign,
+          stops: d.stops.map((s) => ({
+            stop_id: s.stop_id,
+            name: s.stop_name,
+            lat: s.stop_lat,
+            lon: s.stop_lon,
+          })),
         })),
       });
     }

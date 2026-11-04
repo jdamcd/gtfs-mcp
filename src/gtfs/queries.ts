@@ -270,11 +270,17 @@ export function listRoutes(
   return { routes, total };
 }
 
+export interface RouteDirection {
+  direction_id: number | null;
+  headsign: string | null;
+  stops: StopResult[];
+}
+
 export function getRouteDetails(
   db: GtfsDb,
   routeId: string,
   directionId?: number
-): { route: RouteResult | null; stops: StopResult[] } {
+): { route: RouteResult | null; directions: RouteDirection[] } {
   const route = db
     .prepare(
       `SELECT route_id, route_short_name, route_long_name, route_type, route_color, route_text_color, agency_id
@@ -283,42 +289,49 @@ export function getRouteDetails(
     .get(routeId) as RouteResult | undefined;
 
   if (!route) {
-    return { route: null, stops: [] };
+    return { route: null, directions: [] };
   }
 
-  // Pick the longest trip variant as representative — a bare LIMIT 1 returns
-  // whatever SQLite finds first, which often lands on short-turn or branch
-  // variants (e.g. the 8-stop Rockaway Park shuttle instead of the 58-stop A).
-  let tripQuery = `SELECT t.trip_id FROM trips t
-                   INNER JOIN stop_times st ON t.trip_id = st.trip_id
-                   WHERE t.route_id = ?`;
-  const tripParams: (string | number)[] = [routeId];
-
-  if (directionId !== undefined) {
-    tripQuery += ` AND t.direction_id = ?`;
-    tripParams.push(directionId);
-  }
-
-  tripQuery += ` GROUP BY t.trip_id ORDER BY COUNT(st.stop_sequence) DESC LIMIT 1`;
-  const trip = db.prepare(tripQuery).get(...tripParams) as
-    | { trip_id: string }
-    | undefined;
-
-  if (!trip) {
-    return { route, stops: [] };
-  }
-
-  const stops = db
+  // Pick the longest trip variant in each direction as representative: an
+  // arbitrary trip often lands on short-turn or branch variants (e.g. the
+  // 8-stop Rockaway Park shuttle instead of the 58-stop A). trip_id breaks
+  // ties so the choice doesn't depend on SQLite's scan order.
+  const trips = db
     .prepare(
-      `SELECT s.stop_id, s.stop_name, s.stop_lat, s.stop_lon, s.stop_code, s.location_type, s.parent_station
-       FROM stop_times st
-       INNER JOIN stops s ON st.stop_id = s.stop_id
-       WHERE st.trip_id = ?
-       ORDER BY st.stop_sequence`
+      `SELECT trip_id, direction_id, trip_headsign FROM (
+         SELECT t.trip_id, t.direction_id, t.trip_headsign,
+                ROW_NUMBER() OVER (
+                  PARTITION BY t.direction_id
+                  ORDER BY COUNT(st.stop_sequence) DESC, t.trip_id
+                ) AS rank
+         FROM trips t
+         INNER JOIN stop_times st ON t.trip_id = st.trip_id
+         WHERE t.route_id = @routeId
+           AND (@directionId IS NULL OR t.direction_id = @directionId)
+         GROUP BY t.trip_id
+       )
+       WHERE rank = 1
+       ORDER BY direction_id`
     )
-    .all(trip.trip_id) as StopResult[];
+    .all({ routeId, directionId: directionId ?? null }) as Pick<
+    TripRow,
+    "trip_id" | "direction_id" | "trip_headsign"
+  >[];
 
-  return { route, stops };
+  const stopsStmt = db.prepare(
+    `SELECT s.stop_id, s.stop_name, s.stop_lat, s.stop_lon, s.stop_code, s.location_type, s.parent_station
+     FROM stop_times st
+     INNER JOIN stops s ON st.stop_id = s.stop_id
+     WHERE st.trip_id = ?
+     ORDER BY st.stop_sequence`
+  );
+  const directions = trips.map((trip) => ({
+    direction_id: trip.direction_id,
+    headsign: trip.trip_headsign,
+    stops: stopsStmt.all(trip.trip_id) as StopResult[],
+  }));
+
+  return { route, directions };
 }
 
 export function getTripDetails(

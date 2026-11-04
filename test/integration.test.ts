@@ -286,23 +286,29 @@ describe("list_routes", () => {
 });
 
 describe("get_route", () => {
-  it("returns route with ordered stops", async () => {
+  it("returns the requested direction with ordered stops", async () => {
     const result = await client.callTool({
       name: "get_route",
       arguments: { system: "test", route_id: "R1", direction_id: 0 },
     });
     const data = getJsonContent(result);
     expect(data.route.route_id).toBe("R1");
-    expect(data.stops.map((s: any) => s.stop_id)).toEqual(["S1N", "S2", "S3"]);
+    expect(data.directions).toHaveLength(1);
+    expect(data.directions[0].headsign).toBe("Uptown");
+    // T1 rather than the shorter T4 in the same direction.
+    expect(data.directions[0].stops.map((s: any) => s.stop_id)).toEqual(["S1N", "S2", "S3"]);
   });
 
-  it("picks the longest trip variant when multiple exist for the same direction", async () => {
+  it("returns both directions when direction_id is left out", async () => {
     const result = await client.callTool({
       name: "get_route",
-      arguments: { system: "test", route_id: "R1", direction_id: 0 },
+      arguments: { system: "test", route_id: "R1" },
     });
-    const ids = getJsonContent(result).stops.map((s: any) => s.stop_id);
-    expect(ids).toEqual(["S1N", "S2", "S3"]);
+    const directions = getJsonContent(result).directions;
+    expect(directions.map((d: any) => [d.direction_id, d.headsign])).toEqual([
+      [0, "Uptown"],
+      [1, "Downtown"],
+    ]);
   });
 
   it("returns not found for invalid route", async () => {

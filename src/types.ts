@@ -28,6 +28,12 @@ export const RouteDetailSchema = RouteSummarySchema.extend({
   color: z.string().nullable(),
 });
 
+export const RouteDirectionSchema = z.object({
+  direction_id: z.number().nullable(),
+  headsign: z.string().nullable(),
+  stops: z.array(StopSchema),
+});
+
 export const SystemEntrySchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -146,7 +152,7 @@ export const ListRoutesResponseSchema = z.object({
 
 export const RouteDetailsResponseSchema = z.object({
   route: RouteDetailSchema,
-  stops: z.array(StopSchema),
+  directions: z.array(RouteDirectionSchema),
 });
 
 export const ArrivalsResponseSchema = z.object({
