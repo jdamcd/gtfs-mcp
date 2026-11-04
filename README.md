@@ -140,7 +140,7 @@ npm test
 
 ### Evals
 
-LLM evals use [promptfoo](https://promptfoo.dev/) to verify that a model selects the correct tools for natural-language transit queries. Each case runs against Claude Haiku 5.5, Sonnet 5.5 and Opus 5.5 with identical settings. Requires `ANTHROPIC_API_KEY` and `GTFS_MCP_CONFIG` set in `.env` or the environment.
+LLM evals use [promptfoo](https://promptfoo.dev/) to verify that a model selects the correct tools for natural-language transit queries. Each case runs against Claude Haiku 5.5, Sonnet 5.5 and Opus 5.5 with identical settings. Requires `ANTHROPIC_API_KEY` and `GTFS_MCP_CONFIG` set in `.env` or the environment. promptfoo isn't a project dependency: the eval scripts run a pinned version with `npx`, which downloads it on first use.
 
 ```bash
 npm run build

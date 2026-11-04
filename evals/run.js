@@ -7,11 +7,12 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { summarize } from "./summarize.js";
 
-// The project's own promptfoo, not whichever one is first on PATH.
-const PROMPTFOO = fileURLToPath(new URL("../node_modules/.bin/promptfoo", import.meta.url));
+// Not a devDependency: npm 10 and 11 resolve its optional peers differently,
+// and CI runs both. The exact version keeps runs comparable; eval:view in
+// package.json uses the same one.
+const PROMPTFOO = ["--yes", "promptfoo@0.125.1"];
 
 const [out, ...args] = process.argv.slice(2);
 if (!out) {
@@ -20,7 +21,7 @@ if (!out) {
 }
 
 rmSync(out, { force: true });
-const run = spawnSync(PROMPTFOO, ["eval", ...args, "-o", out], { stdio: "inherit" });
+const run = spawnSync("npx", [...PROMPTFOO, "eval", ...args, "-o", out], { stdio: "inherit" });
 if (run.error) {
   console.error(run.error.message);
   process.exit(1);
