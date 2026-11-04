@@ -50,6 +50,12 @@ describe("gradeToolCalls", () => {
     expect(gradeToolCalls(calls, spec).pass).toBe(true);
   });
 
+  it("matches null only when the argument is left out", () => {
+    const spec = { require: [{ tool: "get_route", input: { route_id: "1", direction_id: null } }] };
+    expect(gradeToolCalls([call("get_route", { route_id: "1" })], spec).pass).toBe(true);
+    expect(gradeToolCalls([call("get_route", { route_id: "1", direction_id: 0 })], spec).pass).toBe(false);
+  });
+
   it("supports anyOf and noTools", () => {
     const calls = [call("list_routes"), call("get_stop")];
     expect(gradeToolCalls(calls, { require: [{ anyOf: [{ tool: "get_route" }, { tool: "list_routes" }] }] }).pass).toBe(true);

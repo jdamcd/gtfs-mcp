@@ -17,6 +17,7 @@ export function executedToolCalls(providerResponse) {
 const COORD_TOLERANCE = 1e-4;
 
 function valueMatches(actual, expected) {
+  if (expected === null) return actual == null;
   if (typeof expected === "number") {
     const n = typeof actual === "number" ? actual : Number(actual);
     return Number.isFinite(n) && Math.abs(n - expected) <= COORD_TOLERANCE;
@@ -47,6 +48,7 @@ function describeCall(call) {
  * spec.require: list of requirements, all of which must hold. Each is either
  *   { tool, input? } or { anyOf: [{ tool, input? }, ...] }. `input` lists
  *   argument values that must match exactly (numbers within a small tolerance).
+ *   `null` means the argument must be left out.
  *   A call the tool rejected still counts: the model chose correctly.
  * spec.system: if set, a call made with a different `system` doesn't satisfy
  *   a requirement, so a guessed system ID can't pass. assertToolCalls fills

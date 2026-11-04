@@ -82,10 +82,15 @@ tests:
     vars:
       query: "What stops does the 1 train make going northbound?"
     metadata:
+      # MTA's direction 0 is northbound. Leaving the direction out returns
+      # both, each with its headsign, so that's fine too. Only southbound isn't.
       expect:
         require:
-          - tool: get_route
-            input: { route_id: "1" }
+          - anyOf:
+              - tool: get_route
+                input: { route_id: "1", direction_id: 0 }
+              - tool: get_route
+                input: { route_id: "1", direction_id: null }
 
   - description: "Arrivals: upcoming trains at a stop"
     vars:
