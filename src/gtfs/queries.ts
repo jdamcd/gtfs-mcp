@@ -125,6 +125,11 @@ export function resolveStopIds(db: GtfsDb, stopId: string): string[] {
   return [stopId];
 }
 
+// Pair with ESCAPE '\' in the SQL, or SQLite matches the backslashes literally.
+function likeContains(text: string): string {
+  return `%${text.replace(/[\\%_]/g, "\\$&")}%`;
+}
+
 export function searchStops(
   db: GtfsDb,
   query: string,
@@ -137,14 +142,14 @@ export function searchStops(
   const stmt = db.prepare(
     `SELECT stop_id, stop_name, stop_lat, stop_lon, stop_code, location_type, parent_station
      FROM stops
-     WHERE stop_name LIKE ?
+     WHERE stop_name LIKE ? ESCAPE '\\'
        AND (parent_station IS NULL OR parent_station = '')
        AND (location_type IS NULL OR location_type IN (0, 1))
      ORDER BY instr(lower(stop_name), lower(?)) = 1 DESC,
               stop_name COLLATE NOCASE, stop_id
      LIMIT ?`
   );
-  return stmt.all(`%${query}%`, query, limit) as StopResult[];
+  return stmt.all(likeContains(query), query, limit) as StopResult[];
 }
 
 export function getStopDetails(
@@ -239,9 +244,9 @@ export function listRoutes(
   }
   if (query) {
     where.push(
-      "(route_short_name LIKE ? OR route_long_name LIKE ? OR route_id LIKE ?)"
+      "(route_short_name LIKE ? ESCAPE '\\' OR route_long_name LIKE ? ESCAPE '\\' OR route_id LIKE ? ESCAPE '\\')"
     );
-    const pattern = `%${query}%`;
+    const pattern = likeContains(query);
     params.push(pattern, pattern, pattern);
   }
   const whereSql = where.length ? ` WHERE ${where.join(" AND ")}` : "";

@@ -47,6 +47,11 @@ describe("searchStops", () => {
     expect(ids).toEqual(["S2", "S4"]);
   });
 
+  it("matches % and _ literally", () => {
+    expect(searchStops(db, "_")).toEqual([]);
+    expect(searchStops(db, "%")).toEqual([]);
+  });
+
   it("returns empty array for no matches", () => {
     const results = searchStops(db, "Nonexistent Stop XYZ");
     expect(results).toEqual([]);
@@ -187,6 +192,11 @@ describe("listRoutes", () => {
     const { routes } = listRoutes(db, { query: "Route One" });
     expect(routes.length).toBe(1);
     expect(routes[0].route_id).toBe("R1");
+  });
+
+  it("matches % and _ literally", () => {
+    expect(listRoutes(db, { query: "_" }).total).toBe(0);
+    expect(listRoutes(db, { query: "%" }).total).toBe(0);
   });
 
   it("respects limit and returns correct total", () => {
