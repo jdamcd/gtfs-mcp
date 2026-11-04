@@ -130,15 +130,21 @@ export function searchStops(
   query: string,
   limit: number = 10
 ): StopResult[] {
+  // Names starting with the query go first: a plain name sort would rank
+  // "15 St-Prospect Park" above "Park Pl" for "Park", and the limit can cut
+  // the stop the user meant. instr rather than LIKE, so the query's own % or _
+  // can't act as wildcards in the ranking.
   const stmt = db.prepare(
     `SELECT stop_id, stop_name, stop_lat, stop_lon, stop_code, location_type, parent_station
      FROM stops
      WHERE stop_name LIKE ?
        AND (parent_station IS NULL OR parent_station = '')
        AND (location_type IS NULL OR location_type IN (0, 1))
+     ORDER BY instr(lower(stop_name), lower(?)) = 1 DESC,
+              stop_name COLLATE NOCASE, stop_id
      LIMIT ?`
   );
-  return stmt.all(`%${query}%`, limit) as StopResult[];
+  return stmt.all(`%${query}%`, query, limit) as StopResult[];
 }
 
 export function getStopDetails(

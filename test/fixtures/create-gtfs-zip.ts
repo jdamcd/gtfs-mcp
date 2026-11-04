@@ -26,6 +26,7 @@ R2,TA,2,Route Two,3,00FF00,000000`,
 S1,Central Station,40.7128,-74.0060,1,
 S1N,Central Station North,40.7130,-74.0058,0,S1
 S1S,Central Station South,40.7126,-74.0062,0,S1
+S4,Bryant Park,40.7536,-73.9832,0,
 S2,Park Avenue,40.7200,-74.0100,0,
 S3,Times Square,40.7580,-73.9855,0,`,
 

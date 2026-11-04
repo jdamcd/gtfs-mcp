@@ -40,6 +40,13 @@ describe("searchStops", () => {
     expect(results.length).toBeLessThanOrEqual(1);
   });
 
+  it("lists names that start with the query first", () => {
+    // Bryant Park comes before Park Avenue in stops.txt and alphabetically,
+    // so neither table order nor a plain name sort would pass.
+    const ids = searchStops(db, "Park").map((s) => s.stop_id);
+    expect(ids).toEqual(["S2", "S4"]);
+  });
+
   it("returns empty array for no matches", () => {
     const results = searchStops(db, "Nonexistent Stop XYZ");
     expect(results).toEqual([]);
