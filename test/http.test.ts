@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { request as httpRequest, type Server } from "node:http";
 import {
   setupTestDb,
@@ -25,10 +24,11 @@ const { createHttpMcpServer } = await import("../src/http.js");
 
 const testConfig = createTestConfig();
 
-let client: Client;
 let httpServer: Server;
+let closeHandler: () => Promise<void>;
 let dbDir: string;
 let port: number;
+let url: URL;
 
 beforeAll(async () => {
   const result = await setupTestDb();
@@ -80,37 +80,52 @@ beforeAll(async () => {
     return new Response(body, { status: 200 });
   });
 
-  ({ httpServer } = createHttpMcpServer(testConfig));
+  ({ httpServer, close: closeHandler } = createHttpMcpServer(testConfig));
 
   await new Promise<void>((resolve) => {
     httpServer.listen(0, "127.0.0.1", () => resolve());
   });
   const addr = httpServer.address();
   port = typeof addr === "object" && addr ? addr.port : 0;
-
-  const transport = new StreamableHTTPClientTransport(
-    new URL(`http://localhost:${port}/mcp`),
-  );
-  client = new Client({ name: "test-client", version: "1.0.0" });
-  await client.connect(transport);
+  url = new URL(`http://localhost:${port}/mcp`);
 }, 30_000);
 
 afterAll(async () => {
   vi.restoreAllMocks();
-  await client?.close();
+  await closeHandler?.();
   await new Promise<void>((resolve) => {
     httpServer?.close(() => resolve());
   });
   cleanupTestDb(dbDir);
 });
 
-describe("HTTP transport", () => {
+// The default client opens with `initialize` (2025 era); `mode: "auto"`
+// probes with `server/discover` (2026-07-28). Both go through one handler.
+describe.each([
+  { era: "legacy", options: undefined },
+  { era: "modern", options: { versionNegotiation: { mode: "auto" as const } } },
+])("HTTP transport ($era era)", ({ era, options }) => {
+  let client: Client;
+
+  beforeAll(async () => {
+    client = new Client({ name: "test-client", version: "1.0.0" }, options);
+    await client.connect(new StreamableHTTPClientTransport(url));
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
+
+  it(`negotiates the ${era} era`, () => {
+    expect(client.getProtocolEra()).toBe(era);
+  });
+
   it("lists systems", async () => {
     const result = await client.callTool({
       name: "list_systems",
       arguments: {},
     });
-    const data = getJsonContent(result as any);
+    const data = getJsonContent(result);
     expect(data.systems).toEqual([{ id: "test", name: "Test Transit" }]);
   });
 
@@ -119,7 +134,7 @@ describe("HTTP transport", () => {
       name: "search_stops",
       arguments: { system: "test", query: "Central" },
     });
-    const stops = getJsonContent(result as any).stops;
+    const stops = getJsonContent(result).stops;
     expect(stops.length).toBeGreaterThanOrEqual(1);
     expect(stops[0]).toHaveProperty("stop_id");
     expect(stops[0]).toHaveProperty("name");
@@ -130,7 +145,7 @@ describe("HTTP transport", () => {
       name: "list_routes",
       arguments: { system: "test" },
     });
-    const data = getJsonContent(result as any);
+    const data = getJsonContent(result);
     expect(data.routes.length).toBe(2);
     expect(data.total).toBe(2);
   });
@@ -140,7 +155,7 @@ describe("HTTP transport", () => {
       name: "get_arrivals",
       arguments: { system: "test", stop_id: "S2" },
     });
-    const response = getJsonContent(result as any);
+    const response = getJsonContent(result);
     expect(response.arrivals.length).toBeGreaterThanOrEqual(1);
     expect(response.arrivals[0]).toHaveProperty("trip_id");
     expect(response.arrivals[0].is_realtime).toBe(true);
@@ -151,7 +166,7 @@ describe("HTTP transport", () => {
       name: "get_alerts",
       arguments: { system: "test" },
     });
-    const alerts = getJsonContent(result as any).alerts;
+    const alerts = getJsonContent(result).alerts;
     expect(alerts.length).toBe(1);
     expect(alerts[0].header).toBe("Delay on Route 1");
   });
@@ -161,7 +176,7 @@ describe("HTTP transport", () => {
       name: "get_vehicles",
       arguments: { system: "test" },
     });
-    const vehicles = getJsonContent(result as any).vehicles;
+    const vehicles = getJsonContent(result).vehicles;
     expect(vehicles.length).toBe(1);
     expect(vehicles[0].vehicle_id).toBe("V1");
   });
@@ -171,31 +186,42 @@ describe("HTTP transport", () => {
       name: "search_stops",
       arguments: { system: "nonexistent", query: "test" },
     });
-    expect(getTextContent(result as any)).toContain("Unknown system");
+    expect(getTextContent(result)).toContain("Unknown system");
   });
+});
 
-  describe("session error responses", () => {
-    const rpcBody = JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/list",
-      params: {},
-    });
+describe("HTTP transport", () => {
+  describe("stateless serving", () => {
     const postHeaders = {
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
     };
-    const unknownSession = { "mcp-session-id": "does-not-exist" };
 
-    it.each([
-      { name: "POST without session header", method: "POST", headers: postHeaders, body: rpcBody, status: 400 },
-      { name: "POST with unknown session", method: "POST", headers: { ...postHeaders, ...unknownSession }, body: rpcBody, status: 404 },
-      { name: "GET without session header", method: "GET", headers: undefined, body: undefined, status: 400 },
-      { name: "GET with unknown session", method: "GET", headers: unknownSession, body: undefined, status: 404 },
-      { name: "DELETE with unknown session", method: "DELETE", headers: unknownSession, body: undefined, status: 404 },
-    ])("$name → $status", async ({ method, headers, body, status }) => {
-      const res = await fetch(`http://localhost:${port}/mcp`, { method, headers, body });
-      expect(res.status).toBe(status);
+    it("answers a 2025-era request with no session header", async () => {
+      const res = await fetch(`http://localhost:${port}/mcp`, {
+        method: "POST",
+        headers: postHeaders,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-06-18",
+            capabilities: {},
+            clientInfo: { name: "raw", version: "0" },
+          },
+        }),
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("mcp-session-id")).toBeNull();
+    });
+
+    it.each(["GET", "DELETE"])("405 for the session verb %s", async (method) => {
+      const res = await fetch(`http://localhost:${port}/mcp`, {
+        method,
+        headers: { accept: "application/json, text/event-stream" },
+      });
+      expect(res.status).toBe(405);
     });
   });
 

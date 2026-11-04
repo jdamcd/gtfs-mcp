@@ -13,8 +13,7 @@
  *
  *   GTFS_MCP_CONFIG=./config.testing.json npx tsx scripts/campaign.ts --smoke
  */
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { mkdirSync, writeFileSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { loadConfig, type AppConfig, type SystemConfig } from "../src/config.js";
@@ -77,7 +76,6 @@ async function callTool(
   try {
     const result = await client.callTool(
       { name: tool, arguments: args },
-      undefined,
       { timeout: CALL_TIMEOUT_MS }
     );
     return {

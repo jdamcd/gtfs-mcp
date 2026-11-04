@@ -1,3 +1,4 @@
+import type { CallToolResult } from "@modelcontextprotocol/client";
 import type { AppConfig } from "../src/config.js";
 import { importGtfs, openDb } from "gtfs";
 import { join } from "node:path";
@@ -32,17 +33,19 @@ export function createTestConfig(overrides?: Partial<AppConfig>): AppConfig {
   };
 }
 
-export function getTextContent(result: { content: Array<{ text: string }> }): string {
-  return result.content[0].text;
+export function getTextContent(result: CallToolResult): string {
+  const block = result.content[0];
+  if (block.type !== "text") {
+    throw new Error(`Expected text content, got ${block.type}`);
+  }
+  return block.text;
 }
 
-export function getJsonContent(result: { content: Array<{ text: string }> }): any {
+export function getJsonContent(result: CallToolResult): any {
   return JSON.parse(getTextContent(result));
 }
 
-export function getStructuredContent(result: {
-  structuredContent?: unknown;
-}): unknown {
+export function getStructuredContent(result: CallToolResult): unknown {
   return result.structuredContent;
 }
 

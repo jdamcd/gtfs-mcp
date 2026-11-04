@@ -26,9 +26,9 @@ CI runs build + test on Node 22, 24.
 
 ## Architecture
 
-This is an MCP (Model Context Protocol) server that exposes GTFS transit data as tools. It uses stdio transport and is designed to run inside Claude Desktop or similar MCP clients.
+This is an MCP (Model Context Protocol) server that exposes GTFS transit data as tools. It runs over stdio inside Claude Desktop or similar MCP clients, or over Streamable HTTP with `--http`. It uses the SDK 2.x packages (`@modelcontextprotocol/server` and `/node`; `/client` in tests only), which serve both the 2026-07-28 protocol revision and 2025-era clients from the same server factory.
 
-**Entry flow:** `src/index.ts` loads config → `src/server.ts` creates an `McpServer` and registers tool groups via a shared `ToolContext`.
+**Entry flow:** `src/index.ts` loads config → `src/server.ts` exports `createServer(config)`, which builds an `McpServer` and registers tool groups via a shared `ToolContext`. That function is the factory the SDK calls: `serveStdio` in `src/index.ts` calls it once per stdio connection, and `createMcpHandler` in `src/http.ts` calls it once per HTTP request. HTTP serving is stateless (no sessions); `src/http.ts` keeps its own Origin/Host checks and body cap in front of the SDK handler, which checks neither. Caches that must outlive a request (schedule DB, import lock, feed cache) live at module scope in `src/gtfs/`, not on the server instance.
 
 **Two data sources:**
 - **Static GTFS** (`src/gtfs/static.ts`): Downloads GTFS ZIP on first use, imports into a per-system SQLite DB at `data_dir/{system_id}/` using the `gtfs` npm package. Auto-refreshes when DB age exceeds `schedule_refresh_hours`. Deduplicates concurrent imports with a lock map.
@@ -50,6 +50,8 @@ Tests use vitest with `fileParallelism: false`. The integration test (`test/inte
 - Tests all tools end-to-end
 
 Test helpers in `test/helpers.ts` encode protobuf feed fixtures. The GTFS ZIP fixture is built by `test/fixtures/create-gtfs-zip.ts`.
+
+`InMemoryTransport` only connects 2025-era instances, so `test/http.test.ts` is the only coverage of the 2026-07-28 path: it runs every tool test twice, with a default (legacy) client and with `versionNegotiation: { mode: "auto" }`, asserting the negotiated era each time.
 
 **Important:** `vi.mock("../src/gtfs/static.js")` must appear before importing `createServer` due to module mock hoisting.
 

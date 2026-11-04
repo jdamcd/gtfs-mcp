@@ -11,9 +11,9 @@ export const AuthConfigSchema = z.object({
 });
 
 export const RealtimeConfigSchema = z.object({
-  trip_updates: z.array(z.string().url()),
-  vehicle_positions: z.array(z.string().url()),
-  alerts: z.array(z.string().url()),
+  trip_updates: z.array(z.url()),
+  vehicle_positions: z.array(z.url()),
+  alerts: z.array(z.url()),
 });
 
 const TimezoneSchema = z.string().refine(
@@ -25,7 +25,7 @@ const TimezoneSchema = z.string().refine(
       return false;
     }
   },
-  { message: "Invalid IANA timezone (e.g. 'America/New_York', 'Europe/London')" }
+  { error: "Invalid IANA timezone (e.g. 'America/New_York', 'Europe/London')" }
 );
 
 export const SystemConfigSchema = z.object({
@@ -39,7 +39,7 @@ export const SystemConfigSchema = z.object({
       "system id must be alphanumeric with underscores or hyphens"
     ),
   name: z.string(),
-  schedule_url: z.string().url(),
+  schedule_url: z.url(),
   timezone: TimezoneSchema,
   realtime: RealtimeConfigSchema,
   auth: AuthConfigSchema.nullable(),

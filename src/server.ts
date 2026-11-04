@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import type { AppConfig, SystemConfig } from "./config.js";
 import { registerStopTools } from "./tools/stops.js";
 import { registerRouteTools } from "./tools/routes.js";

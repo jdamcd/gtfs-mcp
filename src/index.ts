@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { loadConfig } from "./config.js";
 import { createServer } from "./server.js";
 
@@ -20,9 +20,8 @@ async function main(): Promise<void> {
     `[gtfs-mcp] Loaded config with ${config.systems.length} system(s): ${config.systems.map((s) => s.id).join(", ")}`
   );
 
-  const server = createServer(config);
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  // One factory answers both the 2025-era initialize and the 2026-07-28 discover.
+  serveStdio(() => createServer(config));
 
   console.error("[gtfs-mcp] Server started on stdio transport");
 }

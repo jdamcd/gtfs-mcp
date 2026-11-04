@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { setupTestDb, cleanupTestDb, createTestConfig, getTextContent, getJsonContent, getStructuredContent, encodeTripUpdateFeed, encodeAlertFeed, encodeVehiclePositionFeed } from "./helpers.js";
 import { formatLocalTime, GTFS_TIME_PATTERN } from "../src/time.js";
 import packageJson from "../package.json" with { type: "json" };

@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import type { transit_realtime as TransitRealtime } from "gtfs-realtime-bindings";
 import type { RealtimeConfig, SystemConfig } from "../config.js";
 import { fetchAllFeeds } from "../gtfs/realtime.js";

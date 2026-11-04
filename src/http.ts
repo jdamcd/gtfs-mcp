@@ -4,8 +4,8 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
-import { randomUUID } from "node:crypto";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createMcpHandler } from "@modelcontextprotocol/server";
+import { toNodeHandler } from "@modelcontextprotocol/node";
 import type { AppConfig } from "./config.js";
 import { loadConfig } from "./config.js";
 import { createServer } from "./server.js";
@@ -38,24 +38,26 @@ function buildLocalDefaults(port: number): { hosts: string[]; origins: string[] 
 
 export interface HttpMcpServer {
   httpServer: Server;
-  closeAllSessions: () => Promise<void>;
+  close: () => Promise<void>;
 }
 
 /**
  * HTTP server for the MCP Streamable HTTP transport.
  *
- * Each client session gets its own McpServer and transport instance. The
+ * Stateless: the SDK handler builds a fresh McpServer per request. The
  * wrapper enforces the spec's DNS-rebinding mitigations (Origin + Host
- * validation, single endpoint path) before delegating to the SDK transport.
- * Override the default localhost-only allow lists with MCP_ALLOWED_HOSTS /
- * MCP_ALLOWED_ORIGINS env vars (comma-separated) — only safe paired with
- * an external auth layer.
+ * validation, single endpoint path) and a body cap before delegating,
+ * since the handler checks neither. Override the default localhost-only
+ * allow lists with MCP_ALLOWED_HOSTS / MCP_ALLOWED_ORIGINS env vars
+ * (comma-separated) — only safe paired with an external auth layer.
  */
 export function createHttpMcpServer(config: AppConfig): HttpMcpServer {
-  const sessions = new Map<string, StreamableHTTPServerTransport>();
   const hostsOverride = parseEnvList(process.env.MCP_ALLOWED_HOSTS);
   const originsOverride = parseEnvList(process.env.MCP_ALLOWED_ORIGINS);
   let cachedDefaults: { hosts: string[]; origins: string[] } | undefined;
+
+  const handler = createMcpHandler(() => createServer(config));
+  const handleMcpRequest = toNodeHandler(handler);
 
   function getDefaults(port: number) {
     if (!cachedDefaults) cachedDefaults = buildLocalDefaults(port);
@@ -72,22 +74,6 @@ export function createHttpMcpServer(config: AppConfig): HttpMcpServer {
     // browser-driven requests carry one and only those are DNS-rebinding targets.
     if (origin === undefined) return true;
     return (originsOverride ?? getDefaults(port).origins).includes(origin);
-  }
-
-  function resolveSession(
-    sessionId: string | undefined,
-    res: ServerResponse,
-  ): StreamableHTTPServerTransport | null {
-    if (!sessionId) {
-      res.writeHead(400).end("Bad Request: missing session ID");
-      return null;
-    }
-    const transport = sessions.get(sessionId);
-    if (!transport) {
-      res.writeHead(404).end("Not Found: unknown session ID");
-      return null;
-    }
-    return transport;
   }
 
   const httpServer = createHttpServer(async (req: IncomingMessage, res: ServerResponse) => {
@@ -139,60 +125,17 @@ export function createHttpMcpServer(config: AppConfig): HttpMcpServer {
         return;
       }
 
-      const sessionId = req.headers["mcp-session-id"] as string | undefined;
-
-      const isInitialize =
-        !sessionId &&
-        (Array.isArray(body)
-          ? body.some(
-              (m: { method?: string }) => m.method === "initialize",
-            )
-          : (body as { method?: string }).method === "initialize");
-
-      if (isInitialize) {
-        const transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: () => randomUUID(),
-          onsessioninitialized: (id) => {
-            sessions.set(id, transport);
-            console.error(`[gtfs-mcp] HTTP session created: ${id}`);
-          },
-        });
-
-        transport.onclose = () => {
-          if (transport.sessionId) {
-            sessions.delete(transport.sessionId);
-            console.error(
-              `[gtfs-mcp] HTTP session closed: ${transport.sessionId}`,
-            );
-          }
-        };
-
-        const server = createServer(config);
-        await server.connect(transport);
-        await transport.handleRequest(req, res, body);
-        return;
-      }
-
-      const transport = resolveSession(sessionId, res);
-      if (!transport) return;
-      await transport.handleRequest(req, res, body);
+      // Pass the parsed body: the adapter would otherwise re-read the drained stream.
+      await handleMcpRequest(req, res, body);
     } else if (req.method === "GET" || req.method === "DELETE") {
-      const sessionId = req.headers["mcp-session-id"] as string | undefined;
-      const transport = resolveSession(sessionId, res);
-      if (!transport) return;
-      await transport.handleRequest(req, res);
+      // 2025-era session verbs. Serving is stateless, so the handler answers 405.
+      await handleMcpRequest(req, res);
     } else {
       res.writeHead(405).end("Method Not Allowed");
     }
   });
 
-  async function closeAllSessions(): Promise<void> {
-    const closes = Array.from(sessions.values()).map((t) => t.close());
-    sessions.clear();
-    await Promise.all(closes);
-  }
-
-  return { httpServer, closeAllSessions };
+  return { httpServer, close: () => handler.close() };
 }
 
 export async function startHttpServer(): Promise<void> {
@@ -204,7 +147,7 @@ export async function startHttpServer(): Promise<void> {
     `[gtfs-mcp] Loaded config with ${config.systems.length} system(s): ${config.systems.map((s) => s.id).join(", ")}`,
   );
 
-  const { httpServer, closeAllSessions } = createHttpMcpServer(config);
+  const { httpServer, close } = createHttpMcpServer(config);
 
   httpServer.listen(port, host, () => {
     console.error(
@@ -217,7 +160,7 @@ export async function startHttpServer(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     console.error(`[gtfs-mcp] Received ${signal}, shutting down...`);
-    await closeAllSessions();
+    await close();
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
     process.exit(0);
   };
