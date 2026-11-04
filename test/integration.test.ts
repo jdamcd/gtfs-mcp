@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { setupTestDb, cleanupTestDb, createTestConfig, getTextContent, getJsonContent, getStructuredContent, encodeTripUpdateFeed, encodeAlertFeed, encodeVehiclePositionFeed } from "./helpers.js";
 import { formatLocalTime, GTFS_TIME_PATTERN } from "../src/time.js";
+import packageJson from "../package.json" with { type: "json" };
 import {
   ListSystemsResponseSchema,
   SearchStopsResponseSchema,
@@ -148,6 +149,12 @@ afterAll(() => {
 function toLocalTimeString(unixSecs: number): string {
   return formatLocalTime(new Date(unixSecs * 1000), AGENCY_TZ);
 }
+
+describe("server info", () => {
+  it("reports the package version", () => {
+    expect(client.getServerVersion()?.version).toBe(packageJson.version);
+  });
+});
 
 describe("list_systems", () => {
   it("returns configured systems", async () => {

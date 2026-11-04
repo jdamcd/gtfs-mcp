@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { AppConfig, SystemConfig } from "./config.js";
 import { registerStopTools } from "./tools/stops.js";
@@ -13,11 +14,18 @@ import { jsonResponse } from "./tools/helpers.js";
 import type { ToolContext } from "./tools/helpers.js";
 import { ListSystemsResponseSchema } from "./types.js";
 
+// Not a JSON import: package.json is outside tsconfig's rootDir. It sits one
+// level above both src/ and dist/, so the same relative path works for tests
+// and the build.
+const { version } = createRequire(import.meta.url)("../package.json") as {
+  version: string;
+};
+
 export function createServer(config: AppConfig): McpServer {
   const server = new McpServer(
     {
       name: "gtfs-mcp",
-      version: "1.0.0",
+      version,
     },
     {
       instructions:
