@@ -425,7 +425,7 @@ async function runChainFlow(
     query: anchor,
     limit: 5,
   });
-  const stops = (search.result as any[] | undefined) ?? [];
+  const stops: any[] = (search.result as any)?.stops ?? [];
   if (stops.length === 0) {
     console.error(`  chain: no stops matched anchor "${anchor}", aborting`);
     return;
