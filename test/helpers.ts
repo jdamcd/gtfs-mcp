@@ -125,7 +125,12 @@ export function encodeAlertFeed(
     id: string;
     headerText: string;
     descriptionText: string;
-    informedEntities?: Array<{ routeId?: string; stopId?: string }>;
+    informedEntities?: Array<{
+      agencyId?: string;
+      routeId?: string;
+      stopId?: string;
+      tripId?: string;
+    }>;
     activePeriods?: Array<{ start?: number; end?: number }>;
     effect?: number;
   }>
@@ -145,8 +150,10 @@ export function encodeAlertFeed(
           translation: [{ text: a.descriptionText, language: "en" }],
         },
         informedEntity: (a.informedEntities ?? []).map((ie) => ({
+          agencyId: ie.agencyId,
           routeId: ie.routeId,
           stopId: ie.stopId,
+          trip: ie.tripId ? { tripId: ie.tripId } : undefined,
         })),
         activePeriod: a.activePeriods,
         effect: a.effect,

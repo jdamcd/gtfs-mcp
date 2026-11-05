@@ -172,11 +172,16 @@ export function getStopDetails(
     return { stop: null, routes: [] };
   }
 
-  // Resolve to child stops if this is a parent station
-  const queryStopIds = resolveStopIds(db, stopId);
-  const placeholders = queryStopIds.map(() => "?").join(", ");
+  return { stop, routes: getRoutesServingStops(db, resolveStopIds(db, stopId)) };
+}
 
-  const routes = db
+export function getRoutesServingStops(
+  db: GtfsDb,
+  stopIds: string[]
+): RouteResult[] {
+  if (stopIds.length === 0) return [];
+  const placeholders = stopIds.map(() => "?").join(", ");
+  return db
     .prepare(
       `SELECT DISTINCT r.route_id, r.route_short_name, r.route_long_name, r.route_type, r.route_color, r.route_text_color, r.agency_id
        FROM routes r
@@ -184,9 +189,7 @@ export function getStopDetails(
        INNER JOIN stop_times st ON t.trip_id = st.trip_id
        WHERE st.stop_id IN (${placeholders})`
     )
-    .all(...queryStopIds) as RouteResult[];
-
-  return { stop, routes };
+    .all(...stopIds) as RouteResult[];
 }
 
 export function getScheduledArrivals(

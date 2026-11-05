@@ -555,9 +555,9 @@ describe("get_alerts", () => {
       name: "get_alerts",
       arguments: { system: "test", stop_id: "S3" },
     });
-    const alerts = getJsonContent(result).alerts;
-    expect(alerts.length).toBe(1);
-    expect(alerts[0].header).toBe("Station closure");
+    const ids = getJsonContent(result).alerts.map((a: any) => a.id).sort();
+    // alert-1 is line-wide on R1, which serves S3.
+    expect(ids).toEqual(["alert-1", "alert-2"]);
   });
 
   it("returns an error for an unknown stop", async () => {
@@ -603,6 +603,25 @@ describe("get_alerts stop matching", () => {
       descriptionText: "",
       informedEntities: [{ stopId: "S1" }, { stopId: "S1S" }],
     },
+    {
+      // R2 serves S1N and S2, not S3.
+      id: "line",
+      headerText: "Route 2 delays",
+      descriptionText: "",
+      informedEntities: [{ routeId: "R2" }],
+    },
+    {
+      id: "trip",
+      headerText: "One Route 2 train held",
+      descriptionText: "",
+      informedEntities: [{ routeId: "R2", tripId: "T3" }],
+    },
+    {
+      id: "agency",
+      headerText: "Elevator out of service",
+      descriptionText: "",
+      informedEntities: [{ agencyId: "TA" }],
+    },
   ]);
 
   async function alertIdsAt(stopId: string): Promise<string[]> {
@@ -626,16 +645,21 @@ describe("get_alerts stop matching", () => {
   }
 
   it("matches a platform to alerts on its whole station", async () => {
-    expect(await alertIdsAt("S1N")).toEqual(["north", "station"]);
+    expect(await alertIdsAt("S1N")).toEqual(["line", "north", "station"]);
   });
 
   it("matches a parent station to alerts on any of its platforms", async () => {
-    expect(await alertIdsAt("S1")).toEqual(["north", "south", "south-works", "station"]);
+    expect(await alertIdsAt("S1")).toEqual(["line", "north", "south", "south-works", "station"]);
   });
 
   it("leaves out a station alert that names other platforms", async () => {
     expect(await alertIdsAt("S1S")).toEqual(["south", "south-works", "station"]);
     expect(await alertIdsAt("S1N")).not.toContain("south-works");
+  });
+
+  it("includes line-wide alerts only for routes serving the stop", async () => {
+    expect(await alertIdsAt("S2")).toEqual(["line"]);
+    expect(await alertIdsAt("S3")).toEqual(["elsewhere"]);
   });
 });
 

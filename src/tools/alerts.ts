@@ -4,6 +4,7 @@ import { alertCauseName, alertEffectName } from "../gtfs/enumNames.js";
 import {
   type GtfsDb,
   type StopResult,
+  getRoutesServingStops,
   getStop,
   resolveStopIds,
 } from "../gtfs/queries.js";
@@ -45,18 +46,27 @@ function nullIfEmpty(s: string | null | undefined): string | null {
 // A station matches alerts on anything inside it. A platform matches its
 // station's alerts too, unless the alert also names stops inside the
 // station, which says which ones it means.
+//
+// A route-only selector covers the whole route, so it matches every stop the
+// route serves. Agency-wide selectors don't: feeds use them for unscoped
+// local alerts too, which would then show at every stop.
 interface StopScope {
   stopIds: Set<string>;
   parentStation: { id: string; childIds: Set<string> } | null;
+  routeIds: Set<string>;
 }
 
 function stopScope(db: GtfsDb, stop: StopResult): StopScope {
-  const stopIds = new Set([stop.stop_id, ...resolveStopIds(db, stop.stop_id)]);
+  const platforms = resolveStopIds(db, stop.stop_id);
+  const stopIds = new Set([stop.stop_id, ...platforms]);
   const parentId = stop.parent_station;
   const parentStation = parentId
     ? { id: parentId, childIds: new Set(resolveStopIds(db, parentId)) }
     : null;
-  return { stopIds, parentStation };
+  const routeIds = new Set(
+    getRoutesServingStops(db, platforms).map((r) => r.route_id)
+  );
+  return { stopIds, parentStation, routeIds };
 }
 
 function concernsStop(
@@ -66,10 +76,17 @@ function concernsStop(
   const named = informed.flatMap((ie) => (ie.stopId ? [ie.stopId] : []));
   if (named.some((id) => scope.stopIds.has(id))) return true;
   const station = scope.parentStation;
-  return (
-    !!station &&
+  if (
+    station &&
     named.includes(station.id) &&
     !named.some((id) => station.childIds.has(id))
+  ) {
+    return true;
+  }
+  // A selector that names a trip is about that trip, not the whole route.
+  return informed.some(
+    (ie) =>
+      !ie.stopId && !!ie.routeId && !ie.trip && scope.routeIds.has(ie.routeId)
   );
 }
 
@@ -87,7 +104,7 @@ export function registerAlertTools(ctx: ToolContext): void {
           .string()
           .optional()
           .describe(
-            "Filter by stop ID. A station also matches alerts on its platforms, and a platform matches alerts on its whole station."
+            "Filter by stop ID. Matches alerts on the stop, its platforms or whole station, and line-wide alerts on routes serving it."
           ),
         include_inactive: z
           .boolean()
