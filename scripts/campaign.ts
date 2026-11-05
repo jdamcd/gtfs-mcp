@@ -84,6 +84,7 @@ async function callTool(
       ok: true,
       ms: Date.now() - start,
       result: extractJson(result),
+      ...((result as any)?.isError ? { isError: true } : {}),
     };
   } catch (err) {
     return {
@@ -188,9 +189,21 @@ async function phase0(
 
 async function phase1(client: Client, system: SystemConfig, tracker: Tracker): Promise<void> {
   const run = phaseRunner(client, system, "phase1", tracker);
-  const all = await run("list_routes_all", "list_routes", { system: system.id });
 
-  const routes = ((all.result as any)?.routes as any[] | undefined) ?? [];
+  // Page through every route: the route cross-checks wait for a full listing.
+  const routes: any[] = [];
+  while (true) {
+    const name = routes.length === 0 ? "list_routes_all" : `list_routes_all_offset${routes.length}`;
+    const page = await run(name, "list_routes", {
+      system: system.id,
+      limit: 1000,
+      offset: routes.length,
+    });
+    const batch = ((page.result as any)?.routes as any[] | undefined) ?? [];
+    routes.push(...batch);
+    const total = (page.result as any)?.total;
+    if (batch.length === 0 || typeof total !== "number" || routes.length >= total) break;
+  }
   const routeTypes = Array.from(new Set(routes.map((r) => r.type).filter((t) => t != null)));
 
   for (const routeType of routeTypes) {
@@ -205,6 +218,12 @@ async function phase1(client: Client, system: SystemConfig, tracker: Tracker): P
     query: "Central",
     limit: 10,
   });
+
+  // A search that treated these as LIKE wildcards would return arbitrary
+  // stops, which ST-05 flags.
+  for (const [name, query] of [["percent", "%"], ["underscore", "_"]]) {
+    await run(`search_stops_${name}`, "search_stops", { system: system.id, query, limit: 10 });
+  }
 }
 
 // ---------- Phase 2: route navigation ----------

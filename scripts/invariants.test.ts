@@ -11,13 +11,70 @@ function ctx(overrides: Partial<RunContext> = {}): RunContext {
   return { ...base, ...overrides };
 }
 
+// A context in which list_routes has listed exactly these routes.
+function listed(routeIds: string[]): RunContext {
+  return ctx({ listedRouteIds: new Set(routeIds), listedRouteTotal: routeIds.length });
+}
+
 function ok(tool: string, args: Record<string, unknown>, result: unknown): CallRecord {
   return { tool, args, ok: true, ms: 0, result };
+}
+
+function errorResult(tool: string, args: Record<string, unknown>, text: string): CallRecord {
+  return { tool, args, ok: true, ms: 0, result: text, isError: true };
 }
 
 function ruleIds(record: CallRecord, context: RunContext): string[] {
   return runInvariants(record, context).map((v) => v.rule);
 }
+
+describe("MCP-01 error results", () => {
+  it("flags output that failed the tool's outputSchema", () => {
+    const rec = errorResult(
+      "get_vehicles",
+      {},
+      "Output validation error: Invalid structured content for tool get_vehicles: speed: expected number"
+    );
+    expect(ruleIds(rec, ctx())).toEqual(["MCP-01"]);
+  });
+
+  it("leaves other error results to the per-tool rules", () => {
+    const rec = errorResult("get_alerts", {}, "The alerts feed for test-sys could not be fetched (HTTP 503).");
+    expect(ruleIds(rec, ctx())).toEqual([]);
+  });
+});
+
+describe("X-STOP stop_id round trip", () => {
+  it("flags a stop tool rejecting a stop that get_route returned", () => {
+    const c = ctx();
+    runInvariants(
+      ok("get_route", { route_id: "R1" }, {
+        route: { route_id: "R1" },
+        directions: [{ direction_id: 0, stops: [{ stop_id: "S1N" }] }],
+      }),
+      c
+    );
+    for (const tool of ["get_stop", "get_arrivals", "get_alerts"]) {
+      const rec = errorResult(tool, { stop_id: "S1N" }, "Stop not found: S1N. Use search_stops by name.");
+      expect(ruleIds(rec, c)).toEqual(["X-STOP"]);
+    }
+  });
+
+  it("counts a stop's parent station as handed out", () => {
+    const c = ctx();
+    runInvariants(
+      ok("get_stop", { stop_id: "S1N" }, { stop: { stop_id: "S1N", parent_station: "S1" }, routes: [] }),
+      c
+    );
+    const rec = errorResult("get_alerts", { stop_id: "S1" }, "Stop not found: S1.");
+    expect(ruleIds(rec, c)).toEqual(["X-STOP"]);
+  });
+
+  it("allows not-found for a stop no tool returned", () => {
+    const rec = errorResult("get_arrivals", { stop_id: "TYPO" }, "Stop not found: TYPO.");
+    expect(ruleIds(rec, ctx())).toEqual([]);
+  });
+});
 
 describe("SYS-01 list_systems", () => {
   it("passes when ids match configured", () => {
@@ -39,7 +96,15 @@ describe("RT-01 list_routes duplicates", () => {
       routes: [{ route_id: "R1" }, { route_id: "R2" }],
     });
     expect(ruleIds(rec, c)).toEqual([]);
-    expect(c.observedRouteIds.has("R1")).toBe(true);
+    expect(c.listedRouteIds.has("R1")).toBe(true);
+    expect(c.listedRouteTotal).toBe(2);
+  });
+
+  it("only counts unfiltered calls toward the full listing", () => {
+    const c = ctx();
+    runInvariants(ok("list_routes", { route_type: 3 }, { total: 1, routes: [{ route_id: "R1" }] }), c);
+    expect(c.listedRouteIds.size).toBe(0);
+    expect(c.listedRouteTotal).toBeNull();
   });
 
   it("flags duplicates", () => {
@@ -70,6 +135,28 @@ describe("RT-02 / RT-03 get_route", () => {
     expect(ruleIds(rec, ctx())).toContain("RT-02");
   });
 
+  it("flags RT-04 when a direction other than the requested one comes back", () => {
+    const rec = ok("get_route", { route_id: "R1", direction_id: 0 }, {
+      route: { route_id: "R1" },
+      directions: [
+        { direction_id: 0, stops: [] },
+        { direction_id: 1, stops: [] },
+      ],
+    });
+    expect(ruleIds(rec, ctx())).toEqual(["RT-04"]);
+  });
+
+  it("flags RT-04 when a direction_id repeats", () => {
+    const rec = ok("get_route", { route_id: "R1" }, {
+      route: { route_id: "R1" },
+      directions: [
+        { direction_id: 0, stops: [] },
+        { direction_id: 0, stops: [] },
+      ],
+    });
+    expect(ruleIds(rec, ctx())).toEqual(["RT-04"]);
+  });
+
   it("passes on clean response, including a stop shared by both directions", () => {
     const rec = ok("get_route", { route_id: "R1" }, {
       route: { route_id: "R1" },
@@ -79,6 +166,25 @@ describe("RT-02 / RT-03 get_route", () => {
       ],
     });
     expect(ruleIds(rec, ctx())).toEqual([]);
+  });
+});
+
+describe("ST-04 / ST-05 search_stops matching and order", () => {
+  const search = (query: string, names: string[]) =>
+    ok("search_stops", { query }, {
+      stops: names.map((name, i) => ({ stop_id: `S${i}`, name })),
+    });
+
+  it("passes when prefix matches come first, ignoring ASCII case", () => {
+    expect(ruleIds(search("park", ["Park Pl", "PARK ST", "15 St-Prospect Park"]), ctx())).toEqual([]);
+  });
+
+  it("flags ST-04 when a prefix match comes after a non-prefix one", () => {
+    expect(ruleIds(search("Park", ["15 St-Prospect Park", "Park Pl"]), ctx())).toEqual(["ST-04"]);
+  });
+
+  it("flags ST-05 when a name doesn't contain the query", () => {
+    expect(ruleIds(search("%", ["Central"]), ctx())).toEqual(["ST-05"]);
   });
 });
 
@@ -212,8 +318,7 @@ describe("TP-01 / TP-03 / X-ARR-TRIP / X-TRIP-ROUTE get_trip", () => {
       trip: { trip_id: "T2", route_id: "R1" },
       stop_times: [],
     });
-    const c = ctx({ observedRouteIds: new Set(["R1"]) });
-    expect(ruleIds(rec, c)).toContain("TP-03");
+    expect(ruleIds(rec, listed(["R1"]))).toContain("TP-03");
   });
 
   it("flags TP-01 when stop_sequence regresses", () => {
@@ -225,8 +330,7 @@ describe("TP-01 / TP-03 / X-ARR-TRIP / X-TRIP-ROUTE get_trip", () => {
         { stop_id: "S3", stop_sequence: 2 },
       ],
     });
-    const c = ctx({ observedRouteIds: new Set(["R1"]) });
-    expect(ruleIds(rec, c)).toContain("TP-01");
+    expect(ruleIds(rec, listed(["R1"]))).toContain("TP-01");
   });
 
   it("flags X-TRIP-ROUTE when route_id is unknown to list_routes", () => {
@@ -234,8 +338,16 @@ describe("TP-01 / TP-03 / X-ARR-TRIP / X-TRIP-ROUTE get_trip", () => {
       trip: { trip_id: "T1", route_id: "R9" },
       stop_times: [],
     });
-    const c = ctx({ observedRouteIds: new Set(["R1", "R2"]) });
-    expect(ruleIds(rec, c)).toContain("X-TRIP-ROUTE");
+    expect(ruleIds(rec, listed(["R1", "R2"]))).toContain("X-TRIP-ROUTE");
+  });
+
+  it("skips X-TRIP-ROUTE until list_routes has listed every route", () => {
+    const rec = ok("get_trip", { trip_id: "T1" }, {
+      trip: { trip_id: "T1", route_id: "R9" },
+      stop_times: [],
+    });
+    const c = ctx({ listedRouteIds: new Set(["R1"]), listedRouteTotal: 404 });
+    expect(ruleIds(rec, c)).not.toContain("X-TRIP-ROUTE");
   });
 
   it("allows null route_id (synthesised RT-only trips)", () => {
@@ -243,8 +355,7 @@ describe("TP-01 / TP-03 / X-ARR-TRIP / X-TRIP-ROUTE get_trip", () => {
       trip: { trip_id: "SYN", route_id: null },
       stop_times: [],
     });
-    const c = ctx({ observedRouteIds: new Set(["R1"]) });
-    expect(ruleIds(rec, c)).toEqual([]);
+    expect(ruleIds(rec, listed(["R1"]))).toEqual([]);
   });
 });
 
@@ -274,8 +385,22 @@ describe("AL-01 / X-ALERT-ROUTE get_alerts", () => {
         },
       ],
     });
-    const c = ctx({ observedRouteIds: new Set(["R1"]) });
-    expect(ruleIds(rec, c)).toContain("X-ALERT-ROUTE");
+    expect(ruleIds(rec, listed(["R1"]))).toContain("X-ALERT-ROUTE");
+  });
+
+  it("does not fire X-ALERT-ROUTE on a partial list_routes listing", () => {
+    const rec = ok("get_alerts", {}, {
+      alerts: [
+        {
+          id: "a1",
+          header: "h",
+          description: "d",
+          informed_entities: [{ route_id: "R9" }],
+        },
+      ],
+    });
+    const c = ctx({ listedRouteIds: new Set(["R1"]), listedRouteTotal: 404 });
+    expect(ruleIds(rec, c)).toEqual([]);
   });
 
   it("does not fire X-ALERT-ROUTE when list_routes hasn't been seen yet", () => {
