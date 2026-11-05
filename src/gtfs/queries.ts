@@ -152,16 +152,21 @@ export function searchStops(
   return stmt.all(likeContains(query), query, limit) as StopResult[];
 }
 
-export function getStopDetails(
-  db: GtfsDb,
-  stopId: string
-): { stop: StopResult | null; routes: RouteResult[] } {
+export function getStop(db: GtfsDb, stopId: string): StopResult | null {
   const stop = db
     .prepare(
       `SELECT stop_id, stop_name, stop_lat, stop_lon, stop_code, location_type, parent_station
        FROM stops WHERE stop_id = ?`
     )
     .get(stopId) as StopResult | undefined;
+  return stop ?? null;
+}
+
+export function getStopDetails(
+  db: GtfsDb,
+  stopId: string
+): { stop: StopResult | null; routes: RouteResult[] } {
+  const stop = getStop(db, stopId);
 
   if (!stop) {
     return { stop: null, routes: [] };

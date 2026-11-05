@@ -1,6 +1,7 @@
 import type { transit_realtime as TransitRealtime } from "gtfs-realtime-bindings";
 import { z } from "zod";
 import { alertCauseName, alertEffectName } from "../gtfs/enumNames.js";
+import { getStop } from "../gtfs/queries.js";
 import { alertSeverity, alertStartMs, isAlertActiveAt } from "../gtfs/rtHelpers.js";
 import { extractRtTime, formatLocalDateTime } from "../time.js";
 import {
@@ -13,9 +14,11 @@ import {
   type ToolContext,
   resolveSystem,
   unknownSystemResponse,
+  unknownStopResponse,
   jsonResponse,
   errorResponse,
   fetchRealtime,
+  getReadyDb,
 } from "./helpers.js";
 
 function getTranslatedText(
@@ -61,6 +64,11 @@ export function registerAlertTools(ctx: ToolContext): void {
     async ({ system, route_id, stop_id, include_inactive }) => {
       const config = resolveSystem(ctx.systems, system);
       if (!config) return unknownSystemResponse(system, ctx.systems);
+
+      if (stop_id) {
+        const db = await getReadyDb(config, ctx.dataDir, ctx.refreshHours);
+        if (!getStop(db, stop_id)) return unknownStopResponse(stop_id);
+      }
 
       const rt = await fetchRealtime(config, "alerts");
       if (rt.status === "not_configured") {

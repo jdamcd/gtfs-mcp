@@ -9,8 +9,8 @@ import {
   type ToolContext,
   resolveSystem,
   unknownSystemResponse,
+  unknownStopResponse,
   jsonResponse,
-  errorResponse,
   getReadyDb,
 } from "./helpers.js";
 
@@ -138,11 +138,7 @@ export function registerStopTools(ctx: ToolContext): void {
       const db = await getReadyDb(config, ctx.dataDir, ctx.refreshHours);
       const details = getStopDetails(db, stop_id);
 
-      if (!details.stop) {
-        return errorResponse(
-          `Stop not found: ${stop_id}. Use search_stops by name or find_nearby_stops by coordinates to discover valid stop_ids.`
-        );
-      }
+      if (!details.stop) return unknownStopResponse(stop_id);
 
       return jsonResponse({
         stop: {

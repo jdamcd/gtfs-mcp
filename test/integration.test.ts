@@ -463,6 +463,47 @@ describe("get_arrivals", () => {
     vi.useRealTimers();
   });
 
+  it("returns an error for an unknown stop", async () => {
+    const result = await client.callTool({
+      name: "get_arrivals",
+      arguments: { system: "test", stop_id: "INVALID" },
+    });
+    expect((result as any).isError).toBe(true);
+    expect(getTextContent(result)).toContain("Stop not found: INVALID");
+  });
+
+  it("accepts a stop that only the realtime feed names", async () => {
+    const feed = encodeTripUpdateFeed([
+      {
+        tripId: "T_RT_STOP",
+        routeId: "R1",
+        stopTimeUpdates: [
+          { stopId: "RT_ONLY", arrivalTime: Math.floor(Date.now() / 1000) + 300 },
+        ],
+      },
+    ]);
+    const { clearFeedCache } = await import("../src/gtfs/realtime.js");
+    clearFeedCache();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) =>
+      String(url).includes("trip-updates")
+        ? new Response(feed, { status: 200 })
+        : new Response(new Uint8Array(), { status: 200 })
+    );
+    try {
+      const result = await client.callTool({
+        name: "get_arrivals",
+        arguments: { system: "test", stop_id: "RT_ONLY" },
+      });
+      expect((result as any).isError).toBeFalsy();
+      const response = getJsonContent(result);
+      expect(response.data_source).toBe("realtime");
+      expect(response.arrivals.map((a: any) => a.trip_id)).toEqual(["T_RT_STOP"]);
+    } finally {
+      clearFeedCache();
+      vi.spyOn(globalThis, "fetch").mockImplementation(defaultFetch);
+    }
+  });
+
   it("merges realtime with scheduled beyond the RT window", async () => {
     // Pin to early morning so scheduled S1S arrival at 09:20 is in the
     // future. Realtime has no data for S1S, so scheduled fills in entirely.
@@ -517,6 +558,15 @@ describe("get_alerts", () => {
     const alerts = getJsonContent(result).alerts;
     expect(alerts.length).toBe(1);
     expect(alerts[0].header).toBe("Station closure");
+  });
+
+  it("returns an error for an unknown stop", async () => {
+    const result = await client.callTool({
+      name: "get_alerts",
+      arguments: { system: "test", stop_id: "INVALID" },
+    });
+    expect((result as any).isError).toBe(true);
+    expect(getTextContent(result)).toContain("Stop not found: INVALID");
   });
 });
 

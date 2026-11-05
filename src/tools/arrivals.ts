@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   getScheduledArrivals,
+  getStop,
   makeStopNameResolver,
   resolveStopIds,
 } from "../gtfs/queries.js";
@@ -31,6 +32,7 @@ import {
   type ToolContext,
   resolveSystem,
   unknownSystemResponse,
+  unknownStopResponse,
   jsonResponse,
   getReadyDb,
   fetchRealtime,
@@ -78,6 +80,18 @@ export function registerArrivalTools(ctx: ToolContext): void {
 
       const rt = await fetchRealtime(config, "trip_updates");
       const entities = rt.entities;
+
+      // Realtime feeds can name stops the schedule lacks, and get_trip and
+      // get_vehicles pass those IDs on, so only a stop unknown to both is an
+      // error.
+      if (
+        !getStop(db, stop_id) &&
+        !entities.some((e) =>
+          e.tripUpdate?.stopTimeUpdate?.some((stu) => stu.stopId === stop_id)
+        )
+      ) {
+        return unknownStopResponse(stop_id);
+      }
 
       const realtime: Sortable[] = [];
 

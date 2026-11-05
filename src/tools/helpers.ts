@@ -48,6 +48,14 @@ export function unknownSystemResponse(
   );
 }
 
+// Tools that take a stop_id error on an unknown one rather than returning an
+// empty result, so the model can tell a mistyped ID from a quiet stop.
+export function unknownStopResponse(stopId: string) {
+  return errorResponse(
+    `Stop not found: ${stopId}. Use search_stops by name or find_nearby_stops by coordinates to discover valid stop_ids.`
+  );
+}
+
 const FEED_LABELS: Record<keyof RealtimeConfig, string> = {
   trip_updates: "trip updates",
   vehicle_positions: "vehicle positions",
