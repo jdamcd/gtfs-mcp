@@ -132,20 +132,24 @@ function checkGetRoute(record: CallRecord, ctx: RunContext): Violation[] {
     });
   }
 
-  const stops: any[] = Array.isArray(data.stops) ? data.stops : [];
-  const stopIds = stops.map((s) => s?.stop_id).filter((id): id is string => typeof id === "string");
-  const dupes = findDuplicates(stopIds);
-  if (dupes.length > 0) {
-    violations.push({
-      rule: "RT-02",
-      severity: "error",
-      message: "get_route.stops contains duplicate stop_ids",
-      context: { duplicates: dupes },
-    });
+  // A stop can appear in both directions, so duplicates only count within one.
+  const directions: any[] = Array.isArray(data.directions) ? data.directions : [];
+  for (const direction of directions) {
+    const stops: any[] = Array.isArray(direction?.stops) ? direction.stops : [];
+    const stopIds = stops.map((s) => s?.stop_id).filter((id): id is string => typeof id === "string");
+    const dupes = findDuplicates(stopIds);
+    if (dupes.length > 0) {
+      violations.push({
+        rule: "RT-02",
+        severity: "error",
+        message: "a get_route direction contains duplicate stop_ids",
+        context: { direction_id: direction?.direction_id ?? null, duplicates: dupes },
+      });
+    }
+    for (const id of stopIds) ctx.observedStopIds.add(id);
   }
 
   if (typeof data.route?.route_id === "string") ctx.observedRouteIds.add(data.route.route_id);
-  for (const id of stopIds) ctx.observedStopIds.add(id);
 
   return violations;
 }

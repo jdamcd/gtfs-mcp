@@ -55,23 +55,28 @@ describe("RT-02 / RT-03 get_route", () => {
   it("flags mismatched route_id", () => {
     const rec = ok("get_route", { route_id: "R1" }, {
       route: { route_id: "R2" },
-      stops: [],
+      directions: [],
     });
     expect(ruleIds(rec, ctx())).toContain("RT-03");
   });
 
-  it("flags duplicate stops", () => {
+  it("flags duplicate stops within a direction", () => {
     const rec = ok("get_route", { route_id: "R1" }, {
       route: { route_id: "R1" },
-      stops: [{ stop_id: "S1" }, { stop_id: "S2" }, { stop_id: "S1" }],
+      directions: [
+        { direction_id: 0, stops: [{ stop_id: "S1" }, { stop_id: "S2" }, { stop_id: "S1" }] },
+      ],
     });
     expect(ruleIds(rec, ctx())).toContain("RT-02");
   });
 
-  it("passes on clean response", () => {
+  it("passes on clean response, including a stop shared by both directions", () => {
     const rec = ok("get_route", { route_id: "R1" }, {
       route: { route_id: "R1" },
-      stops: [{ stop_id: "S1" }, { stop_id: "S2" }],
+      directions: [
+        { direction_id: 0, stops: [{ stop_id: "S1" }, { stop_id: "S2" }] },
+        { direction_id: 1, stops: [{ stop_id: "S2" }, { stop_id: "S1" }] },
+      ],
     });
     expect(ruleIds(rec, ctx())).toEqual([]);
   });

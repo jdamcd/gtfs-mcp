@@ -96,6 +96,10 @@ async function callTool(
   }
 }
 
+function firstDirectionStops(routeResult: unknown): any[] {
+  return (routeResult as any)?.directions?.[0]?.stops ?? [];
+}
+
 function writeCall(systemId: string, subdir: Subdir, name: string, record: CallRecord): void {
   const dir = join(RESULTS_ROOT, systemId, subdir);
   mkdirSync(dir, { recursive: true });
@@ -228,8 +232,7 @@ async function phase2(client: Client, system: SystemConfig, tracker: Tracker): P
         { system: system.id, route_id: r.route_id, direction_id: direction },
       );
 
-      const stops = (rec.result as any)?.stops as any[] | undefined;
-      const firstStop = stops?.[0]?.stop_id;
+      const firstStop = firstDirectionStops(rec.result)[0]?.stop_id;
       if (firstStop) {
         await run(
           `get_stop_${safe(firstStop)}_from_${safe(r.route_id)}_dir${direction}`,
@@ -261,8 +264,7 @@ async function phase3(client: Client, system: SystemConfig, tracker: Tracker): P
     { system: system.id, route_id: firstRoute.route_id },
   );
 
-  const stops = (routeRec.result as any)?.stops as any[] | undefined;
-  const candidateStops = stops?.slice(0, 3) ?? [];
+  const candidateStops = firstDirectionStops(routeRec.result).slice(0, 3);
 
   for (const s of candidateStops) {
     await run(
@@ -359,7 +361,7 @@ async function phase6(client: Client, system: SystemConfig, tracker: Tracker): P
     "get_route",
     { system: system.id, route_id: firstRoute.route_id },
   );
-  const firstStop = (routeRec.result as any)?.stops?.[0]?.stop_id;
+  const firstStop = firstDirectionStops(routeRec.result)[0]?.stop_id;
   if (!firstStop) return;
 
   const arrivals = await run(
