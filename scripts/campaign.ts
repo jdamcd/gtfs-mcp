@@ -321,6 +321,35 @@ async function phase4(client: Client, system: SystemConfig, tracker: Tracker): P
       { system: system.id, route_id: firstRouteInAlert },
     );
   }
+
+  // The stop filter treats a station and its platforms differently, so query
+  // each stop and its parent station.
+  const queried = new Set<string>();
+  const alertsAtStopAndStation = async (stopId: string) => {
+    for (let id: string | undefined = stopId; id && !queried.has(id); ) {
+      queried.add(id);
+      await run(`get_alerts_stop_${safe(id)}`, "get_alerts", { system: system.id, stop_id: id });
+      const stopRec = await run(`get_stop_${safe(id)}`, "get_stop", { system: system.id, stop_id: id });
+      id = (stopRec.result as any)?.stop?.parent_station ?? undefined;
+    }
+  };
+
+  const namedStop = alerts
+    .flatMap((a) => a.informed_entities ?? [])
+    .map((e: any) => e.stop_id)
+    .find((s: unknown): s is string => typeof s === "string");
+  if (namedStop) await alertsAtStopAndStation(namedStop);
+
+  // A stop on an alerted route picks up that route's line-wide alerts.
+  if (firstRouteInAlert) {
+    const routeRec = await run(
+      `get_route_${safe(firstRouteInAlert)}`,
+      "get_route",
+      { system: system.id, route_id: firstRouteInAlert },
+    );
+    const routeStop = firstDirectionStops(routeRec.result)[0]?.stop_id;
+    if (routeStop) await alertsAtStopAndStation(routeStop);
+  }
 }
 
 // ---------- Phase 5: vehicles ----------
