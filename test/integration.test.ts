@@ -570,6 +570,75 @@ describe("get_alerts", () => {
   });
 });
 
+describe("get_alerts stop matching", () => {
+  const alertFeed = encodeAlertFeed([
+    {
+      id: "station",
+      headerText: "Elevator out at Central Station",
+      descriptionText: "",
+      informedEntities: [{ routeId: "R1", stopId: "S1" }],
+    },
+    {
+      id: "north",
+      headerText: "Northbound platform crowding",
+      descriptionText: "",
+      informedEntities: [{ stopId: "S1N" }],
+    },
+    {
+      id: "south",
+      headerText: "Southbound platform closed",
+      descriptionText: "",
+      informedEntities: [{ stopId: "S1S" }],
+    },
+    {
+      id: "elsewhere",
+      headerText: "Times Square closed",
+      descriptionText: "",
+      informedEntities: [{ stopId: "S3" }],
+    },
+    {
+      // Names the station and then the one platform it affects.
+      id: "south-works",
+      headerText: "Southbound platform renovation",
+      descriptionText: "",
+      informedEntities: [{ stopId: "S1" }, { stopId: "S1S" }],
+    },
+  ]);
+
+  async function alertIdsAt(stopId: string): Promise<string[]> {
+    const { clearFeedCache } = await import("../src/gtfs/realtime.js");
+    clearFeedCache();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) =>
+      String(url).includes("alerts")
+        ? new Response(alertFeed, { status: 200 })
+        : new Response(new Uint8Array(), { status: 200 })
+    );
+    try {
+      const result = await client.callTool({
+        name: "get_alerts",
+        arguments: { system: "test", stop_id: stopId },
+      });
+      return getJsonContent(result).alerts.map((a: any) => a.id).sort();
+    } finally {
+      clearFeedCache();
+      vi.spyOn(globalThis, "fetch").mockImplementation(defaultFetch);
+    }
+  }
+
+  it("matches a platform to alerts on its whole station", async () => {
+    expect(await alertIdsAt("S1N")).toEqual(["north", "station"]);
+  });
+
+  it("matches a parent station to alerts on any of its platforms", async () => {
+    expect(await alertIdsAt("S1")).toEqual(["north", "south", "south-works", "station"]);
+  });
+
+  it("leaves out a station alert that names other platforms", async () => {
+    expect(await alertIdsAt("S1S")).toEqual(["south", "south-works", "station"]);
+    expect(await alertIdsAt("S1N")).not.toContain("south-works");
+  });
+});
+
 describe("get_vehicles", () => {
   it("returns vehicle positions", async () => {
     const result = await client.callTool({

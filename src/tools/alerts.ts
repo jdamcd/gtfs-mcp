@@ -1,7 +1,12 @@
 import type { transit_realtime as TransitRealtime } from "gtfs-realtime-bindings";
 import { z } from "zod";
 import { alertCauseName, alertEffectName } from "../gtfs/enumNames.js";
-import { getStop } from "../gtfs/queries.js";
+import {
+  type GtfsDb,
+  type StopResult,
+  getStop,
+  resolveStopIds,
+} from "../gtfs/queries.js";
 import { alertSeverity, alertStartMs, isAlertActiveAt } from "../gtfs/rtHelpers.js";
 import { extractRtTime, formatLocalDateTime } from "../time.js";
 import {
@@ -37,6 +42,37 @@ function nullIfEmpty(s: string | null | undefined): string | null {
   return s == null || s === "" ? null : s;
 }
 
+// A station matches alerts on anything inside it. A platform matches its
+// station's alerts too, unless the alert also names stops inside the
+// station, which says which ones it means.
+interface StopScope {
+  stopIds: Set<string>;
+  parentStation: { id: string; childIds: Set<string> } | null;
+}
+
+function stopScope(db: GtfsDb, stop: StopResult): StopScope {
+  const stopIds = new Set([stop.stop_id, ...resolveStopIds(db, stop.stop_id)]);
+  const parentId = stop.parent_station;
+  const parentStation = parentId
+    ? { id: parentId, childIds: new Set(resolveStopIds(db, parentId)) }
+    : null;
+  return { stopIds, parentStation };
+}
+
+function concernsStop(
+  informed: TransitRealtime.IEntitySelector[],
+  scope: StopScope
+): boolean {
+  const named = informed.flatMap((ie) => (ie.stopId ? [ie.stopId] : []));
+  if (named.some((id) => scope.stopIds.has(id))) return true;
+  const station = scope.parentStation;
+  return (
+    !!station &&
+    named.includes(station.id) &&
+    !named.some((id) => station.childIds.has(id))
+  );
+}
+
 export function registerAlertTools(ctx: ToolContext): void {
   ctx.server.registerTool(
     "get_alerts",
@@ -47,7 +83,12 @@ export function registerAlertTools(ctx: ToolContext): void {
       inputSchema: {
         system: z.string().describe("System ID, from list_systems"),
         route_id: z.string().optional().describe("Filter by route ID"),
-        stop_id: z.string().optional().describe("Filter by stop ID"),
+        stop_id: z
+          .string()
+          .optional()
+          .describe(
+            "Filter by stop ID. A station also matches alerts on its platforms, and a platform matches alerts on its whole station."
+          ),
         include_inactive: z
           .boolean()
           .default(false)
@@ -65,9 +106,12 @@ export function registerAlertTools(ctx: ToolContext): void {
       const config = resolveSystem(ctx.systems, system);
       if (!config) return unknownSystemResponse(system, ctx.systems);
 
+      let scope: StopScope | null = null;
       if (stop_id) {
         const db = await getReadyDb(config, ctx.dataDir, ctx.refreshHours);
-        if (!getStop(db, stop_id)) return unknownStopResponse(stop_id);
+        const stop = getStop(db, stop_id);
+        if (!stop) return unknownStopResponse(stop_id);
+        scope = stopScope(db, stop);
       }
 
       const rt = await fetchRealtime(config, "alerts");
@@ -96,7 +140,7 @@ export function registerAlertTools(ctx: ToolContext): void {
         if (route_id && !informed.some((ie) => ie.routeId === route_id)) {
           return false;
         }
-        if (stop_id && !informed.some((ie) => ie.stopId === stop_id)) {
+        if (scope && !concernsStop(informed, scope)) {
           return false;
         }
         return true;
