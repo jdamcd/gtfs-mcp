@@ -533,6 +533,20 @@ describe("get_vehicles", () => {
     expect(vehicles[0]).toHaveProperty("longitude");
   });
 
+  it("reports fields the feed left unset as null, not 0", async () => {
+    const result = await client.callTool({
+      name: "get_vehicles",
+      arguments: { system: "test" },
+    });
+    const vehicles = getJsonContent(result).vehicles;
+    const v1 = vehicles.find((v: any) => v.vehicle_id === "V1");
+    const v2 = vehicles.find((v: any) => v.vehicle_id === "V2");
+    expect(v1.bearing).toBe(180);
+    expect(v2.bearing).toBeNull();
+    expect(v2.speed).toBeNull();
+    expect(v2.occupancy_status).toBeNull();
+  });
+
   it("filters by route_id", async () => {
     const result = await client.callTool({
       name: "get_vehicles",
@@ -559,6 +573,8 @@ describe("get_trip", () => {
     const s2 = data.stop_times.find((st: any) => st.stop_id === "S2");
     expect(s2?.is_realtime).toBe(true);
     expect(s2?.arrival_delay_seconds).toBe(120);
+    // Unset in the fixture; must not read as 0
+    expect(s2?.departure_delay_seconds).toBeNull();
 
     // S1N also has realtime update
     const s1n = data.stop_times.find((st: any) => st.stop_id === "S1N");
@@ -593,6 +609,10 @@ describe("get_trip", () => {
     expect(data.stop_times.map((st: any) => st.stop_id)).toEqual(["S2", "S3"]);
     expect(data.stop_times[0].arrival_delay_seconds).toBe(30);
     expect(data.stop_times[1].arrival_delay_seconds).toBe(45);
+    expect(data.stop_times[0].departure_delay_seconds).toBeNull();
+    expect(data.trip.direction_id).toBeNull();
+    // No stop_sequence in the feed, so it falls back to position
+    expect(data.stop_times.map((st: any) => st.stop_sequence)).toEqual([0, 1]);
   });
 });
 

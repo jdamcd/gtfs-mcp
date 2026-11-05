@@ -6,6 +6,7 @@ import {
   type GtfsDb,
 } from "../gtfs/queries.js";
 import {
+  rtField,
   stopStatusFromRelationship,
   tripStatusFromRelationship,
 } from "../gtfs/rtHelpers.js";
@@ -80,8 +81,8 @@ export function registerTripTools(ctx: ToolContext): void {
         for (const stu of tripUpdate.stopTimeUpdate) {
           if (stu.stopId) {
             realtimeByStop.set(stu.stopId, {
-              arrivalDelay: stu.arrival?.delay ?? null,
-              departureDelay: stu.departure?.delay ?? null,
+              arrivalDelay: rtField(stu.arrival, "delay"),
+              departureDelay: rtField(stu.departure, "delay"),
               scheduleRelationship: stu.scheduleRelationship,
             });
           }
@@ -139,11 +140,11 @@ function synthesiseTripFromRt(
     return {
       stop_id: stu.stopId ?? null,
       stop_name: stu.stopId ? resolveName(stu.stopId) : null,
-      stop_sequence: stu.stopSequence ?? idx,
+      stop_sequence: rtField(stu, "stopSequence") ?? idx,
       arrival_time: arrivalMs ? formatLocalTime(new Date(arrivalMs), timezone) : null,
       departure_time: departureMs ? formatLocalTime(new Date(departureMs), timezone) : null,
-      arrival_delay_seconds: stu.arrival?.delay ?? null,
-      departure_delay_seconds: stu.departure?.delay ?? null,
+      arrival_delay_seconds: rtField(stu.arrival, "delay"),
+      departure_delay_seconds: rtField(stu.departure, "delay"),
       is_realtime: true,
       status: stopStatusFromRelationship(stu.scheduleRelationship),
     };
@@ -155,7 +156,7 @@ function synthesiseTripFromRt(
       route_id: tripUpdate.trip?.routeId ?? null,
       service_id: null,
       trip_headsign: lastStopId ? resolveName(lastStopId) : null,
-      direction_id: tripUpdate.trip?.directionId ?? null,
+      direction_id: rtField(tripUpdate.trip, "directionId"),
       status: tripStatusFromRelationship(tripUpdate.trip?.scheduleRelationship),
     },
     stop_times: stopTimes,

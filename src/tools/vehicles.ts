@@ -4,6 +4,7 @@ import {
   occupancyStatusName,
   vehicleStopStatusName,
 } from "../gtfs/enumNames.js";
+import { rtField } from "../gtfs/rtHelpers.js";
 import { extractRtTime, formatLocalTime } from "../time.js";
 import { VehiclesResponseSchema, type VehiclePosition } from "../types.js";
 import {
@@ -66,14 +67,16 @@ export function registerVehicleTools(ctx: ToolContext): void {
           route_id: v.trip?.routeId ?? null,
           latitude: pos.latitude ?? 0,
           longitude: pos.longitude ?? 0,
-          bearing: pos.bearing ?? null,
-          speed: pos.speed ?? null,
+          bearing: rtField(pos, "bearing"),
+          speed: rtField(pos, "speed"),
           timestamp: timestampMs
             ? formatLocalTime(new Date(timestampMs), config.timezone)
             : null,
           stop_id: v.stopId ?? null,
           current_status: vehicleStopStatusName(v.currentStatus),
-          occupancy_status: occupancyStatusName(v.occupancyStatus),
+          // Unset occupancy would read as EMPTY. current_status and
+          // congestion_level keep their proto defaults, which are correct.
+          occupancy_status: occupancyStatusName(rtField(v, "occupancyStatus")),
           congestion_level: congestionLevelName(v.congestionLevel),
         };
       });

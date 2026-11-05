@@ -30,6 +30,17 @@ const EFFECT_RANK: number[] = [
   Effect.NO_EFFECT,
 ];
 
+// protobufjs leaves an unset optional scalar as its prototype default (0), so
+// `?? null` never fires. Only an own property means the feed sent the field.
+export function rtField<T extends object, K extends keyof T>(
+  message: T | null | undefined,
+  key: K
+): NonNullable<T[K]> | null {
+  if (!message || !Object.hasOwn(message, key)) return null;
+  const value = message[key];
+  return value == null ? null : (value as NonNullable<T[K]>);
+}
+
 /** Lower is more disruptive. */
 export function alertSeverity(effect: number | null | undefined): number {
   const idx = EFFECT_RANK.indexOf(effect ?? Effect.UNKNOWN_EFFECT);
