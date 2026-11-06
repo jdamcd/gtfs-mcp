@@ -1,3 +1,4 @@
+import Database from "better-sqlite3";
 import { closeDb, importGtfs, openDb } from "gtfs";
 import { existsSync, statSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -7,10 +8,14 @@ import { applyAuth } from "../auth.js";
 // Per system, when to look at the DB file again.
 const recheckAt = new Map<string, number>();
 const importLocks = new Map<string, Promise<void>>();
-const dbConnections = new Map<string, ReturnType<typeof openDb>>();
+const dbConnections = new Map<string, Database.Database>();
 
 // Longer than a hung download (downloadTimeout), far shorter than a refresh.
 const REFRESH_RETRY_MS = 10 * 60 * 1000;
+
+// Longer than the realtime fetch cap (FETCH_TIMEOUT_MS in realtime.ts),
+// the longest a tool holds a handle across an await.
+export const DB_RETIRE_MS = 60 * 1000;
 
 function getSqlitePath(dataDir: string, systemId: string): string {
   return join(dataDir, systemId, "gtfs.db");
@@ -28,8 +33,11 @@ export async function ensureGtfsLoaded(
   if ((recheckAt.get(system.id) ?? 0) > now && existsSync(dbPath)) return;
   if (!existsSync(dbPath)) return startImport(system, dataDir, dbPath);
 
-  if (now - statSync(dbPath).mtimeMs < maxAge) {
-    recheckAt.set(system.id, now + maxAge);
+  const mtimeMs = statSync(dbPath).mtimeMs;
+  if (now - mtimeMs < maxAge) {
+    // Counted from the file's age: a server started late in the file's life
+    // would otherwise serve it for up to twice the refresh window.
+    recheckAt.set(system.id, mtimeMs + maxAge);
     return;
   }
   // Serve the stale schedule and refresh behind the request; an outage at
@@ -112,30 +120,25 @@ async function doImport(
   }
   releaseDb(tmpPath);
 
-  // No await between here and the rename, so nothing can reopen the old
-  // file in the gap.
-  const cached = dbConnections.get(system.id);
-  if (cached) {
-    closeDb(cached);
-    dbConnections.delete(system.id);
-  }
+  // The old connection keeps reading the file it opened, so a request
+  // holding it across an await isn't cut off. Safe because the DB is
+  // never in WAL mode, which ties a connection to sidecar files by path.
+  const old = dbConnections.get(system.id);
+  dbConnections.delete(system.id);
   renameSync(tmpPath, dbPath);
+  if (old) setTimeout(() => old.close(), DB_RETIRE_MS).unref();
   console.error(`[gtfs-mcp] Import complete for ${system.name}`);
 }
 
-// A refresh closes the old connection when its import lands, so take the
-// handle after the last await and use it synchronously.
-export function getDb(
-  system: SystemConfig,
-  dataDir: string
-): ReturnType<typeof openDb> {
+export function getDb(system: SystemConfig, dataDir: string): Database.Database {
   const cached = dbConnections.get(system.id);
   if (cached) {
     return cached;
   }
 
-  const dbPath = getSqlitePath(dataDir, system.id);
-  const db = openDb({ sqlitePath: dbPath });
+  // Not through the gtfs package's openDb: that returns one registered
+  // connection per path, which couldn't coexist with a retiring one.
+  const db = new Database(getSqlitePath(dataDir, system.id));
   // The gtfs package doesn't index stop coordinates, so nearby-stop lookups
   // otherwise scan the full stops table on every call.
   db.exec(`CREATE INDEX IF NOT EXISTS idx_stops_coords ON stops(stop_lat, stop_lon)`);

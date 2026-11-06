@@ -3,6 +3,7 @@ import type { transit_realtime as TransitRealtime } from "gtfs-realtime-bindings
 import type { RealtimeConfig, SystemConfig } from "../config.js";
 import { fetchAllFeeds } from "../gtfs/realtime.js";
 import { ensureGtfsLoaded, getDb } from "../gtfs/static.js";
+import type { GtfsDb } from "../gtfs/queries.js";
 
 export interface ToolContext {
   server: McpServer;
@@ -115,7 +116,7 @@ export async function getReadyDb(
   system: SystemConfig,
   dataDir: string,
   refreshHours: number
-) {
+): Promise<GtfsDb> {
   await ensureGtfsLoaded(system, dataDir, refreshHours);
   return getDb(system, dataDir);
 }

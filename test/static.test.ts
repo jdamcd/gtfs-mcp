@@ -10,8 +10,16 @@ vi.mock("gtfs", () => ({
   closeDb: vi.fn((db: any) => db.close()),
 }));
 
+// Only scratch files go through the gtfs package's openDb now.
+vi.mock("better-sqlite3", () => ({
+  default: vi.fn(function () {
+    return { exec: vi.fn(), close: vi.fn() };
+  }),
+}));
+
 const { importGtfs, openDb } = await import("gtfs");
-const { ensureGtfsLoaded, getDb } = await import("../src/gtfs/static.js");
+const Database = (await import("better-sqlite3")).default;
+const { ensureGtfsLoaded, getDb, DB_RETIRE_MS } = await import("../src/gtfs/static.js");
 
 const TMP_ROOT = "/tmp/gtfs-mcp-test/static";
 
@@ -46,6 +54,10 @@ beforeEach(() => {
   vi.mocked(importGtfs).mockReset();
   vi.mocked(openDb).mockReset();
   vi.mocked(openDb).mockImplementation(() => ({ exec: vi.fn(), close: vi.fn() }) as any);
+  vi.mocked(Database).mockReset();
+  vi.mocked(Database).mockImplementation(function () {
+    return { exec: vi.fn(), close: vi.fn() } as any;
+  });
   stderr = vi.spyOn(console, "error").mockImplementation(() => {});
   mkdirSync(TMP_ROOT, { recursive: true });
 });
@@ -80,9 +92,9 @@ describe("ensureGtfsLoaded", () => {
     });
     await ensureGtfsLoaded(system, TMP_ROOT, 24);
     const live = { exec: vi.fn(), close: vi.fn() };
-    vi.mocked(openDb).mockImplementation(
-      ({ sqlitePath }: any) => (sqlitePath === dbPath ? live : { exec: vi.fn(), close: vi.fn() }) as any
-    );
+    vi.mocked(Database).mockImplementation(function () {
+      return live as any;
+    });
     expect(getDb(system, TMP_ROOT)).toBe(live);
 
     // Age the file and use a zero refresh window so both freshness checks fail.
@@ -223,23 +235,46 @@ describe("ensureGtfsLoaded", () => {
       writeFileSync(sqlitePath, `gen${++generation}`);
     });
 
-    // Only closes of the live file count; the scratch file is released too.
     const closeSpy = vi.fn();
-    vi.mocked(openDb).mockImplementation(
-      ({ sqlitePath }: any) =>
-        ({ exec: vi.fn(), close: sqlitePath === dbPath ? closeSpy : vi.fn() }) as any
-    );
+    vi.mocked(Database).mockImplementation(function () {
+      return { exec: vi.fn(), close: closeSpy } as any;
+    });
 
     await ensureGtfsLoaded(system, TMP_ROOT, 24);
     const before = getDb(system, TMP_ROOT);
 
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
     utimesSync(dbPath, 1, 1);
     await ensureGtfsLoaded(system, TMP_ROOT, 0);
     await vi.waitFor(() => expect(readFileSync(dbPath, "utf8")).toBe("gen2"));
     expect(scratchFiles(system.id)).toEqual([]);
-    // The old connection was released through closeDb, and the next getDb
-    // opens the new file rather than returning the stale instance.
-    expect(closeSpy).toHaveBeenCalledTimes(1);
+    // New requests open the new file at once; a request still holding the
+    // old connection keeps it until the grace period ends.
     expect(getDb(system, TMP_ROOT)).not.toBe(before);
+    expect(closeSpy).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(DB_RETIRE_MS);
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts the refresh window from the file's age, not the last check", async () => {
+    const system = makeSystem();
+    const dbPath = join(TMP_ROOT, system.id, "gtfs.db");
+    mkdirSync(join(TMP_ROOT, system.id), { recursive: true });
+    writeFileSync(dbPath, "old");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const start = new Date("2026-01-01T00:00:00Z");
+    vi.setSystemTime(start);
+    const mtime = new Date(start.getTime() - 23 * 3600_000);
+    utimesSync(dbPath, mtime, mtime);
+    vi.mocked(importGtfs).mockImplementation(async ({ sqlitePath }: any) => {
+      writeFileSync(sqlitePath, "new");
+    });
+
+    await ensureGtfsLoaded(system, TMP_ROOT, 24);
+    expect(importGtfs).not.toHaveBeenCalled();
+
+    vi.setSystemTime(new Date(start.getTime() + 2 * 3600_000));
+    await ensureGtfsLoaded(system, TMP_ROOT, 24);
+    await vi.waitFor(() => expect(readFileSync(dbPath, "utf8")).toBe("new"));
   });
 });

@@ -1,6 +1,6 @@
-import type { openDb } from "gtfs";
+import type Database from "better-sqlite3";
 
-export type GtfsDb = ReturnType<typeof openDb>;
+export type GtfsDb = Database.Database;
 
 export interface TripRow {
   trip_id: string;
