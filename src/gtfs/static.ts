@@ -4,9 +4,13 @@ import { join } from "node:path";
 import type { SystemConfig } from "../config.js";
 import { applyAuth } from "../auth.js";
 
-const loadedSystems = new Map<string, { loadedAt: number }>();
+// Per system, when to look at the DB file again.
+const recheckAt = new Map<string, number>();
 const importLocks = new Map<string, Promise<void>>();
 const dbConnections = new Map<string, ReturnType<typeof openDb>>();
+
+// Longer than a hung download (downloadTimeout), far shorter than a refresh.
+const REFRESH_RETRY_MS = 10 * 60 * 1000;
 
 function getSqlitePath(dataDir: string, systemId: string): string {
   return join(dataDir, systemId, "gtfs.db");
@@ -21,26 +25,43 @@ export async function ensureGtfsLoaded(
   const now = Date.now();
   const maxAge = refreshHours * 60 * 60 * 1000;
 
-  // Check if already loaded and fresh in memory
-  const loaded = loadedSystems.get(system.id);
-  if (loaded && now - loaded.loadedAt < maxAge && existsSync(dbPath)) {
+  if ((recheckAt.get(system.id) ?? 0) > now && existsSync(dbPath)) return;
+  if (!existsSync(dbPath)) return startImport(system, dataDir, dbPath);
+
+  if (now - statSync(dbPath).mtimeMs < maxAge) {
+    recheckAt.set(system.id, now + maxAge);
     return;
   }
+  // Serve the stale schedule and refresh behind the request; an outage at
+  // the feed host would otherwise fail every tool call until it ends.
+  refreshInBackground(system, dataDir, dbPath);
+}
 
-  // Check if DB file exists and is fresh enough
-  if (existsSync(dbPath)) {
-    const age = now - statSync(dbPath).mtimeMs;
-    if (age < maxAge) {
-      loadedSystems.set(system.id, { loadedAt: now });
-      return;
-    }
-  }
+// Only the call that starts the refresh handles its failure, so it logs once.
+function refreshInBackground(
+  system: SystemConfig,
+  dataDir: string,
+  dbPath: string
+): void {
+  if (importLocks.has(system.id)) return;
+  startImport(system, dataDir, dbPath).catch((err) => {
+    recheckAt.set(system.id, Date.now() + REFRESH_RETRY_MS);
+    console.error(
+      `[gtfs-mcp] Schedule refresh failed for ${system.name}, still serving the previous schedule: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+  });
+}
 
-  // Deduplicate concurrent imports for the same system
+// Deduplicates concurrent imports for the same system.
+async function startImport(
+  system: SystemConfig,
+  dataDir: string,
+  dbPath: string
+): Promise<void> {
   const existing = importLocks.get(system.id);
-  if (existing) {
-    return existing;
-  }
+  if (existing) return existing;
 
   const importPromise = doImport(system, dataDir, dbPath);
   importLocks.set(system.id, importPromise);
@@ -100,10 +121,10 @@ async function doImport(
   }
   renameSync(tmpPath, dbPath);
   console.error(`[gtfs-mcp] Import complete for ${system.name}`);
-
-  loadedSystems.set(system.id, { loadedAt: Date.now() });
 }
 
+// A refresh closes the old connection when its import lands, so take the
+// handle after the last await and use it synchronously.
 export function getDb(
   system: SystemConfig,
   dataDir: string

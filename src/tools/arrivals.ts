@@ -12,6 +12,7 @@ import {
   TRIP_CANCELED,
 } from "../gtfs/rtHelpers.js";
 import { getActiveServiceIds } from "../gtfs/serviceDay.js";
+import { ensureGtfsLoaded, getDb } from "../gtfs/static.js";
 import {
   currentGtfsDate,
   currentGtfsTime,
@@ -34,7 +35,6 @@ import {
   unknownSystemResponse,
   unknownStopResponse,
   jsonResponse,
-  getReadyDb,
   fetchRealtime,
 } from "./helpers.js";
 
@@ -71,14 +71,17 @@ export function registerArrivalTools(ctx: ToolContext): void {
       const config = resolveSystem(ctx.systems, system);
       if (!config) return unknownSystemResponse(system, ctx.systems);
 
-      const db = await getReadyDb(config, ctx.dataDir, ctx.refreshHours);
+      // The handle comes after the fetch: see getDb.
+      const [, rt] = await Promise.all([
+        ensureGtfsLoaded(config, ctx.dataDir, ctx.refreshHours),
+        fetchRealtime(config, "trip_updates"),
+      ]);
+      const db = getDb(config, ctx.dataDir);
       const stopIds = resolveStopIds(db, stop_id);
       const stopIdSet = new Set(stopIds);
       const resolveHeadsign = makeStopNameResolver(db);
       const nowMs = Date.now();
       const tz = config.timezone;
-
-      const rt = await fetchRealtime(config, "trip_updates");
       const entities = rt.entities;
 
       // Realtime feeds can name stops the schedule lacks, and get_trip and

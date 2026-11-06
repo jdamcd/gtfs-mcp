@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from "vitest";
 import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync, readdirSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -20,6 +20,15 @@ function scratchFiles(systemId: string): string[] {
   return existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".tmp")) : [];
 }
 
+// A DB file old enough to fail any refresh window.
+function writeStaleDb(system: SystemConfig, contents: string): string {
+  const dbPath = join(TMP_ROOT, system.id, "gtfs.db");
+  mkdirSync(join(TMP_ROOT, system.id), { recursive: true });
+  writeFileSync(dbPath, contents);
+  utimesSync(dbPath, 1, 1);
+  return dbPath;
+}
+
 function makeSystem(): SystemConfig {
   return {
     id: `sys-${randomUUID()}`,
@@ -31,14 +40,19 @@ function makeSystem(): SystemConfig {
   };
 }
 
+let stderr: MockInstance;
+
 beforeEach(() => {
   vi.mocked(importGtfs).mockReset();
   vi.mocked(openDb).mockReset();
   vi.mocked(openDb).mockImplementation(() => ({ exec: vi.fn(), close: vi.fn() }) as any);
+  stderr = vi.spyOn(console, "error").mockImplementation(() => {});
   mkdirSync(TMP_ROOT, { recursive: true });
 });
 
 afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   rmSync(TMP_ROOT, { recursive: true, force: true });
 });
 
@@ -78,11 +92,56 @@ describe("ensureGtfsLoaded", () => {
       throw new Error("network error");
     });
 
-    await expect(ensureGtfsLoaded(system, TMP_ROOT, 0)).rejects.toThrow("network error");
+    await ensureGtfsLoaded(system, TMP_ROOT, 0);
+    await vi.waitFor(() =>
+      expect(stderr.mock.calls.flat().join("\n")).toMatch(/refresh failed.*network error/)
+    );
     expect(readFileSync(dbPath, "utf8")).toBe("good");
     expect(scratchFiles(system.id)).toEqual([]);
     expect(getDb(system, TMP_ROOT)).toBe(live);
     expect(live.close).not.toHaveBeenCalled();
+  });
+
+  it("waits before retrying a failed refresh", async () => {
+    const system = makeSystem();
+    const dbPath = writeStaleDb(system, "old");
+    vi.mocked(importGtfs).mockRejectedValue(new Error("dns"));
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const start = new Date("2026-01-01T00:00:00Z");
+    vi.setSystemTime(start);
+    await ensureGtfsLoaded(system, TMP_ROOT, 0);
+    await vi.waitFor(() => expect(stderr.mock.calls.flat().join("\n")).toMatch(/refresh failed/));
+
+    vi.setSystemTime(new Date(start.getTime() + 9 * 60_000));
+    await ensureGtfsLoaded(system, TMP_ROOT, 0);
+    expect(importGtfs).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date(start.getTime() + 11 * 60_000));
+    await ensureGtfsLoaded(system, TMP_ROOT, 0);
+    expect(importGtfs).toHaveBeenCalledTimes(2);
+    expect(readFileSync(dbPath, "utf8")).toBe("old");
+  });
+
+  it("serves a stale DB without waiting for the refresh", async () => {
+    const system = makeSystem();
+    const dbPath = writeStaleDb(system, "old");
+
+    let finishImport!: () => void;
+    vi.mocked(importGtfs).mockImplementation(async ({ sqlitePath }: any) => {
+      await new Promise<void>((r) => (finishImport = r));
+      writeFileSync(sqlitePath, "new");
+    });
+
+    await ensureGtfsLoaded(system, TMP_ROOT, 0);
+    expect(importGtfs).toHaveBeenCalledTimes(1);
+    expect(readFileSync(dbPath, "utf8")).toBe("old");
+    // A second call while the refresh runs joins it rather than starting another.
+    await ensureGtfsLoaded(system, TMP_ROOT, 0);
+    expect(importGtfs).toHaveBeenCalledTimes(1);
+
+    finishImport();
+    await vi.waitFor(() => expect(readFileSync(dbPath, "utf8")).toBe("new"));
+    expect(scratchFiles(system.id)).toEqual([]);
   });
 
   it("retries import on the next call after a failure", async () => {
@@ -164,20 +223,23 @@ describe("ensureGtfsLoaded", () => {
       writeFileSync(sqlitePath, `gen${++generation}`);
     });
 
+    // Only closes of the live file count; the scratch file is released too.
     const closeSpy = vi.fn();
-    vi.mocked(openDb).mockImplementation(() => ({ exec: vi.fn(), close: closeSpy }) as any);
+    vi.mocked(openDb).mockImplementation(
+      ({ sqlitePath }: any) =>
+        ({ exec: vi.fn(), close: sqlitePath === dbPath ? closeSpy : vi.fn() }) as any
+    );
 
     await ensureGtfsLoaded(system, TMP_ROOT, 24);
     const before = getDb(system, TMP_ROOT);
 
     utimesSync(dbPath, 1, 1);
     await ensureGtfsLoaded(system, TMP_ROOT, 0);
-
-    expect(readFileSync(dbPath, "utf8")).toBe("gen2");
+    await vi.waitFor(() => expect(readFileSync(dbPath, "utf8")).toBe("gen2"));
     expect(scratchFiles(system.id)).toEqual([]);
     // The old connection was released through closeDb, and the next getDb
     // opens the new file rather than returning the stale instance.
-    expect(closeSpy).toHaveBeenCalled();
+    expect(closeSpy).toHaveBeenCalledTimes(1);
     expect(getDb(system, TMP_ROOT)).not.toBe(before);
   });
 });
