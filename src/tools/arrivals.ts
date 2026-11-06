@@ -128,7 +128,11 @@ export function registerArrivalTools(ctx: ToolContext): void {
         for (const stu of stopTimeUpdates) {
           if (!stu.stopId || !stopIdSet.has(stu.stopId)) continue;
 
-          const absMs = extractRtTime(stu.arrival?.time);
+          // A trip's first stop often carries only a departure, so without
+          // the fallback a terminus shows no realtime trains leaving it.
+          const absMs =
+            extractRtTime(stu.arrival?.time) ??
+            extractRtTime(stu.departure?.time);
           if (!absMs) continue;
 
           const k = windowKey(stu.stopId, tripRouteId);

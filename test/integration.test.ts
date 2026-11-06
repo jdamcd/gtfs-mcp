@@ -62,8 +62,7 @@ beforeAll(async () => {
       ],
     },
     {
-      // Trip with a stop time update that has departure but no arrival time.
-      // Exercises the unset/zero arrival time handling — should be skipped by get_arrivals.
+      // A departure with no arrival time, as feeds send for a trip's first stop.
       tripId: "T2",
       routeId: "R1",
       stopTimeUpdates: [
@@ -372,7 +371,7 @@ describe("get_arrivals", () => {
     vi.useRealTimers();
   });
 
-  it("ignores stop time updates with no arrival time", async () => {
+  it("uses the departure time when an update has no arrival time", async () => {
     vi.useFakeTimers({ now: new Date("2026-04-20T12:00:00-04:00") });
 
     const result = await client.callTool({
@@ -380,13 +379,49 @@ describe("get_arrivals", () => {
       arguments: { system: "test", stop_id: "S2" },
     });
     const arrivals = getJsonContent(result).arrivals;
-    // T2's departure-only update should be skipped
     const t2Arrivals = arrivals.filter((a: any) => a.trip_id === "T2");
-    expect(t2Arrivals.length).toBe(0);
-    const t1Arrivals = arrivals.filter((a: any) => a.trip_id === "T1");
-    expect(t1Arrivals.length).toBe(1);
+    expect(t2Arrivals.length).toBe(1);
+    expect(t2Arrivals[0].is_realtime).toBe(true);
+    // T2 leaves S2 ten seconds after T1 arrives there.
+    expect(t2Arrivals[0].arrival_time).toBe(toLocalTimeString(s2ArrivalSecs + 10));
 
     vi.useRealTimers();
+  });
+
+  it("ignores stop time updates with no time at all", async () => {
+    const nowSecs = Math.floor(Date.now() / 1000);
+    const feed = encodeTripUpdateFeed([
+      {
+        tripId: "T_TIMED",
+        routeId: "R1",
+        stopTimeUpdates: [{ stopId: "S2", arrivalTime: nowSecs + 300 }],
+      },
+      {
+        tripId: "T_DELAY_ONLY",
+        routeId: "R1",
+        stopTimeUpdates: [{ stopId: "S2", arrivalDelay: 60, departureDelay: 60 }],
+      },
+    ]);
+    const { clearFeedCache } = await import("../src/gtfs/realtime.js");
+    clearFeedCache();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) =>
+      String(url).includes("trip-updates")
+        ? new Response(feed, { status: 200 })
+        : new Response(new Uint8Array(), { status: 200 })
+    );
+    try {
+      const result = await client.callTool({
+        name: "get_arrivals",
+        arguments: { system: "test", stop_id: "S2", route_id: "R1" },
+      });
+      const realtime = getJsonContent(result).arrivals.filter(
+        (a: any) => a.is_realtime
+      );
+      expect(realtime.map((a: any) => a.trip_id)).toEqual(["T_TIMED"]);
+    } finally {
+      clearFeedCache();
+      vi.spyOn(globalThis, "fetch").mockImplementation(defaultFetch);
+    }
   });
 
   it("falls back to scheduled with HH:MM:SS local times", async () => {
