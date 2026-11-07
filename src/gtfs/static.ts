@@ -48,8 +48,8 @@ export async function ensureGtfsLoaded(
 // Within an hour of ageing out is close enough for a window measured in days.
 export const PRE_WARM_CHECK_MS = 60 * 60 * 1000;
 
-// "setup" imports what's missing so the first call doesn't wait on a download;
-// "proactive" also keeps stale DBs refreshed whether or not they get queried.
+// "setup" spares the first call the download; "proactive" also refreshes
+// stale DBs that nothing queries, for a server that runs for days.
 export async function preWarmDatabases(config: AppConfig): Promise<void> {
   const mode = config.pre_warm_database;
   if (mode === "off") return;

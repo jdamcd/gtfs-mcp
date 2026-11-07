@@ -344,7 +344,7 @@ describe("preWarmDatabases", () => {
     expect(importGtfs).toHaveBeenCalledTimes(2);
     expect(readFileSync(join(TMP_ROOT, fresh.id, "gtfs.db"), "utf8")).toBe("fresh");
 
-    // Nothing queried it, but it ages past the window before the next check.
+    // Just refreshed, so age it by hand for the next check to find it stale.
     utimesSync(staleDb, 1, 1);
     importWriting("newer");
     vi.advanceTimersByTime(PRE_WARM_CHECK_MS);
