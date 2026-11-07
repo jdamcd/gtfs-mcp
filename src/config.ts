@@ -49,6 +49,7 @@ export const AppConfigSchema = z.object({
   systems: z.array(SystemConfigSchema),
   data_dir: z.string().default("~/.gtfs-mcp/data"),
   schedule_refresh_hours: z.number().default(24),
+  pre_warm_database: z.enum(["off", "setup", "proactive"]).default("setup"),
 });
 
 export type AuthConfig = z.infer<typeof AuthConfigSchema>;

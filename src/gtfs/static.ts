@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { closeDb, importGtfs, openDb } from "gtfs";
 import { existsSync, statSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { SystemConfig } from "../config.js";
+import type { AppConfig, SystemConfig } from "../config.js";
 import { applyAuth } from "../auth.js";
 
 // Per system, when to look at the DB file again.
@@ -43,6 +43,31 @@ export async function ensureGtfsLoaded(
   // Serve the stale schedule and refresh behind the request; an outage at
   // the feed host would otherwise fail every tool call until it ends.
   refreshInBackground(system, dataDir, dbPath);
+}
+
+// Within an hour of ageing out is close enough for a window measured in days.
+export const PRE_WARM_CHECK_MS = 60 * 60 * 1000;
+
+// "setup" imports what's missing so the first call doesn't wait on a download;
+// "proactive" also keeps stale DBs refreshed whether or not they get queried.
+export async function preWarmDatabases(config: AppConfig): Promise<void> {
+  const mode = config.pre_warm_database;
+  if (mode === "off") return;
+  for (const system of config.systems) {
+    if (mode === "setup" && existsSync(getSqlitePath(config.data_dir, system.id))) continue;
+    try {
+      await ensureGtfsLoaded(system, config.data_dir, config.schedule_refresh_hours);
+    } catch (err) {
+      console.error(
+        `[gtfs-mcp] Schedule import failed for ${system.name}, the next request for it will retry: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
+  }
+  if (mode === "proactive") {
+    setTimeout(() => preWarmDatabases(config), PRE_WARM_CHECK_MS).unref();
+  }
 }
 
 // Only the call that starts the refresh handles its failure, so it logs once.

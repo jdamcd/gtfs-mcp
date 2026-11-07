@@ -29,6 +29,7 @@ export function createTestConfig(overrides?: Partial<AppConfig>): AppConfig {
     ],
     data_dir: "/tmp/gtfs-mcp-test/default",
     schedule_refresh_hours: 24,
+    pre_warm_database: "setup",
     ...overrides,
   };
 }

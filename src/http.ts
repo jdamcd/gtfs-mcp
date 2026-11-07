@@ -9,6 +9,7 @@ import { toNodeHandler } from "@modelcontextprotocol/node";
 import type { AppConfig } from "./config.js";
 import { loadConfig } from "./config.js";
 import { createServer } from "./server.js";
+import { preWarmDatabases } from "./gtfs/static.js";
 
 const MCP_PATH = "/mcp";
 // Real requests are tool calls with a few short arguments: a few hundred bytes.
@@ -153,6 +154,7 @@ export async function startHttpServer(): Promise<void> {
     console.error(
       `[gtfs-mcp] Server started on HTTP transport at http://${host}:${port}${MCP_PATH}`,
     );
+    void preWarmDatabases(config);
   });
 
   let shuttingDown = false;

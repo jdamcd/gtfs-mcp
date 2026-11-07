@@ -39,7 +39,7 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
 }
 ```
 
-Restart Claude Desktop and ask an NYC transit question. The first query triggers a GTFS schedule download (~30s for MTA). Subsequent queries are fast.
+Restart Claude Desktop and ask an NYC transit question. The server downloads the GTFS schedule when it first starts (~15s for MTA), so a question asked straight away waits for it to finish.
 
 ### Adding other transit systems
 
@@ -62,9 +62,16 @@ The server reads a JSON config defining one or more transit systems, pointed to 
     }
   ],
   "data_dir": "~/.gtfs-mcp/data",
-  "schedule_refresh_hours": 24
+  "schedule_refresh_hours": 24,
+  "pre_warm_database": "setup"
 }
 ```
+
+`pre_warm_database` controls when schedules are downloaded:
+
+- `"setup"` (default): any system without a schedule yet is downloaded when the server starts, rather than on its first query. A schedule older than `schedule_refresh_hours` is refreshed in the background on the next query for that system, so an unused system is never re-downloaded. Suits a local install.
+- `"proactive"`: as above, but stale schedules are refreshed whether or not they are queried, at startup and then on an hourly check. Suits a long-running HTTP server.
+- `"off"`: nothing is downloaded until a system's first query.
 
 Each realtime feed type accepts multiple URLs (e.g. MTA splits trip updates across 8 feeds). Set any feed type to `[]` if the system doesn't provide it.
 

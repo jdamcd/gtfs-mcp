@@ -2,6 +2,7 @@
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { loadConfig } from "./config.js";
 import { createServer } from "./server.js";
+import { preWarmDatabases } from "./gtfs/static.js";
 
 const useHttp =
   process.argv.includes("--http") ||
@@ -24,6 +25,7 @@ async function main(): Promise<void> {
   serveStdio(() => createServer(config));
 
   console.error("[gtfs-mcp] Server started on stdio transport");
+  void preWarmDatabases(config);
 }
 
 main().catch((error) => {

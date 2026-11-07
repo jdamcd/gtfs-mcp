@@ -62,12 +62,17 @@ describe("AppConfigSchema", () => {
     ).toThrow();
   });
 
-  it("applies defaults for data_dir and schedule_refresh_hours", () => {
+  it("applies defaults for data_dir, schedule_refresh_hours and pre_warm_database", () => {
     const config = AppConfigSchema.parse({
       systems: [],
     });
     expect(config.data_dir).toBe("~/.gtfs-mcp/data");
     expect(config.schedule_refresh_hours).toBe(24);
+    expect(config.pre_warm_database).toBe("setup");
+  });
+
+  it("rejects an unknown pre_warm_database mode", () => {
+    expect(() => AppConfigSchema.parse({ systems: [], pre_warm_database: "always" })).toThrow();
   });
 
   it("rejects missing systems field", () => {

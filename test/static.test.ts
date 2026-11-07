@@ -19,7 +19,7 @@ vi.mock("better-sqlite3", () => ({
 
 const { importGtfs, openDb } = await import("gtfs");
 const Database = (await import("better-sqlite3")).default;
-const { ensureGtfsLoaded, getDb, DB_RETIRE_MS } = await import("../src/gtfs/static.js");
+const { ensureGtfsLoaded, getDb, preWarmDatabases, DB_RETIRE_MS, PRE_WARM_CHECK_MS } = await import("../src/gtfs/static.js");
 
 const TMP_ROOT = "/tmp/gtfs-mcp-test/static";
 
@@ -276,5 +276,79 @@ describe("ensureGtfsLoaded", () => {
     vi.setSystemTime(new Date(start.getTime() + 2 * 3600_000));
     await ensureGtfsLoaded(system, TMP_ROOT, 24);
     await vi.waitFor(() => expect(readFileSync(dbPath, "utf8")).toBe("new"));
+  });
+});
+
+describe("preWarmDatabases", () => {
+  function importWriting(contents: string) {
+    vi.mocked(importGtfs).mockImplementation(async ({ sqlitePath }: any) => {
+      writeFileSync(sqlitePath, contents);
+    });
+  }
+
+  it("does nothing when off", async () => {
+    const system = makeSystem();
+    await preWarmDatabases({
+      systems: [system],
+      data_dir: TMP_ROOT,
+      schedule_refresh_hours: 24,
+      pre_warm_database: "off",
+    });
+    expect(importGtfs).not.toHaveBeenCalled();
+  });
+
+  it("setup imports systems without a DB, continuing past a failure, and leaves stale ones alone", async () => {
+    const failing = makeSystem();
+    failing.schedule_url = "http://localhost/failing.zip";
+    const missing = makeSystem();
+    const stale = makeSystem();
+    writeStaleDb(stale, "stale");
+
+    vi.mocked(importGtfs).mockImplementation(async ({ agencies, sqlitePath }: any) => {
+      if (agencies[0].url === failing.schedule_url) throw new Error("dns");
+      writeFileSync(sqlitePath, "new");
+    });
+
+    await preWarmDatabases({
+      systems: [failing, missing, stale],
+      data_dir: TMP_ROOT,
+      schedule_refresh_hours: 0,
+      pre_warm_database: "setup",
+    });
+
+    expect(importGtfs).toHaveBeenCalledTimes(2);
+    expect(existsSync(join(TMP_ROOT, failing.id, "gtfs.db"))).toBe(false);
+    expect(readFileSync(join(TMP_ROOT, missing.id, "gtfs.db"), "utf8")).toBe("new");
+    expect(readFileSync(join(TMP_ROOT, stale.id, "gtfs.db"), "utf8")).toBe("stale");
+    expect(stderr.mock.calls.flat().join("\n")).toMatch(/import failed for Test.*dns/);
+  });
+
+  it("proactive refreshes stale DBs at start and keeps checking", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const missing = makeSystem();
+    const stale = makeSystem();
+    const fresh = makeSystem();
+    const staleDb = writeStaleDb(stale, "stale");
+    mkdirSync(join(TMP_ROOT, fresh.id), { recursive: true });
+    writeFileSync(join(TMP_ROOT, fresh.id, "gtfs.db"), "fresh");
+    importWriting("new");
+
+    await preWarmDatabases({
+      systems: [missing, stale, fresh],
+      data_dir: TMP_ROOT,
+      schedule_refresh_hours: 24,
+      pre_warm_database: "proactive",
+    });
+    expect(readFileSync(join(TMP_ROOT, missing.id, "gtfs.db"), "utf8")).toBe("new");
+    await vi.waitFor(() => expect(readFileSync(staleDb, "utf8")).toBe("new"));
+    expect(importGtfs).toHaveBeenCalledTimes(2);
+    expect(readFileSync(join(TMP_ROOT, fresh.id, "gtfs.db"), "utf8")).toBe("fresh");
+
+    // Nothing queried it, but it ages past the window before the next check.
+    utimesSync(staleDb, 1, 1);
+    importWriting("newer");
+    vi.advanceTimersByTime(PRE_WARM_CHECK_MS);
+    await vi.waitFor(() => expect(readFileSync(staleDb, "utf8")).toBe("newer"));
+    expect(importGtfs).toHaveBeenCalledTimes(3);
   });
 });
