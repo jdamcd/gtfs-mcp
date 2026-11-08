@@ -65,15 +65,14 @@ docker run -i --rm \
 ```bash
 docker run -d --rm \
   --name gtfs-mcp \
-  -p 3000:3000 \
+  -p 127.0.0.1:3000:3000 \
   -e GTFS_MCP_TRANSPORT=http \
-  -e HOST=0.0.0.0 \
-  -e PORT=3000 \
-  -e MCP_ALLOWED_HOSTS="*" \
   -v $(pwd)/config.mta.json:/config/config.json:ro \
   -v gtfs-data:/data \
   gtfs-mcp
 ```
+
+The server accepts requests addressed to `localhost:3000`. If you map a different host port, set `MCP_ALLOWED_HOSTS=localhost:<port>` to match.
 
 ### Adding other transit systems
 
