@@ -10,7 +10,7 @@ import { registerTripTools } from "./tools/trips.js";
 import { registerFeedHealthTools } from "./tools/feedHealth.js";
 import { registerSystemsResource } from "./resources/systems.js";
 import { registerTransitStatusPrompt } from "./prompts/transitStatus.js";
-import { jsonResponse } from "./tools/helpers.js";
+import { jsonResponse, portableOutputSchema } from "./tools/helpers.js";
 import type { ToolContext } from "./tools/helpers.js";
 import { ListSystemsResponseSchema } from "./types.js";
 
@@ -52,7 +52,7 @@ export function createServer(config: AppConfig): McpServer {
       title: "List transit systems",
       description:
         "List configured transit systems and their IDs. Call this first when the user hasn't specified a system, or to discover valid `system` values for other tools.",
-      outputSchema: ListSystemsResponseSchema,
+      outputSchema: portableOutputSchema(ListSystemsResponseSchema),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,

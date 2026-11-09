@@ -1301,6 +1301,24 @@ describe("structured output", () => {
     expect((result as any).isError).toBe(true);
     expect(getStructuredContent(result)).toBeUndefined();
   });
+
+  it("advertises nullable fields as anyOf rather than a type array", async () => {
+    const { tools } = await client.listTools();
+    const typeArrays = (node: unknown, path: string): string[] => {
+      if (Array.isArray(node)) return node.flatMap((v, i) => typeArrays(v, `${path}[${i}]`));
+      if (node === null || typeof node !== "object") return [];
+      const obj = node as Record<string, unknown>;
+      const here = Array.isArray(obj.type) ? [path] : [];
+      return here.concat(
+        Object.entries(obj).flatMap(([k, v]) => typeArrays(v, `${path}.${k}`))
+      );
+    };
+    expect(tools.flatMap((t) => typeArrays(t.outputSchema, t.name))).toEqual([]);
+    const arrivals = tools.find((t) => t.name === "get_arrivals")!.outputSchema as any;
+    expect(arrivals.properties.arrivals.items.properties.minutes_away).toEqual({
+      anyOf: [{ type: "number" }, { type: "null" }],
+    });
+  });
 });
 
 describe("resources", () => {

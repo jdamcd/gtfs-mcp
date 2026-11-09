@@ -1,4 +1,10 @@
-import type { McpServer } from "@modelcontextprotocol/server";
+import {
+  fromJsonSchema,
+  type JsonSchemaType,
+  type McpServer,
+  type StandardSchemaWithJSON,
+} from "@modelcontextprotocol/server";
+import { z } from "zod";
 import type { transit_realtime as TransitRealtime } from "gtfs-realtime-bindings";
 import type { RealtimeConfig, SystemConfig } from "../config.js";
 import { fetchAllFeeds } from "../gtfs/realtime.js";
@@ -10,6 +16,35 @@ export interface ToolContext {
   systems: Map<string, SystemConfig>;
   dataDir: string;
   refreshHours: number;
+}
+
+// Zod renders nullable primitives as `type: ["string", "null"]`. Clients that
+// map tool schemas onto a single-type dialect (Gemini's function declarations)
+// may reject that, so split it into anyOf branches.
+//
+// Memoised because fromJsonSchema compiles a validator the SDK caches by object
+// identity for the life of the process, and createServer runs per HTTP request.
+const portableSchemas = new WeakMap<z.ZodType, StandardSchemaWithJSON>();
+
+export function portableOutputSchema<T extends z.ZodType>(schema: T) {
+  let portable = portableSchemas.get(schema);
+  if (!portable) {
+    portable = fromJsonSchema(splitTypeArrays(z.toJSONSchema(schema)) as JsonSchemaType);
+    portableSchemas.set(schema, portable);
+  }
+  return portable as StandardSchemaWithJSON<z.infer<T>, z.infer<T>>;
+}
+
+function splitTypeArrays(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(splitTypeArrays);
+  if (node === null || typeof node !== "object") return node;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(node)) out[key] = splitTypeArrays(value);
+  if (Array.isArray(out.type)) {
+    out.anyOf = out.type.map((type) => ({ type }));
+    delete out.type;
+  }
+  return out;
 }
 
 export function jsonResponse<T extends Record<string, unknown>>(data: T) {

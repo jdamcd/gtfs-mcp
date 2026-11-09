@@ -14,6 +14,7 @@ import {
   jsonResponse,
   errorResponse,
   fetchRealtime,
+  portableOutputSchema,
 } from "./helpers.js";
 
 export function registerVehicleTools(ctx: ToolContext): void {
@@ -27,7 +28,7 @@ export function registerVehicleTools(ctx: ToolContext): void {
         system: z.string().describe("System ID, from list_systems"),
         route_id: z.string().optional().describe("Filter by route ID"),
       },
-      outputSchema: VehiclesResponseSchema,
+      outputSchema: portableOutputSchema(VehiclesResponseSchema),
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,

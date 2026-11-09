@@ -6,6 +6,7 @@ import {
   resolveSystem,
   unknownSystemResponse,
   jsonResponse,
+  portableOutputSchema,
 } from "./helpers.js";
 
 interface FeedStatus {
@@ -28,7 +29,7 @@ export function registerFeedHealthTools(ctx: ToolContext): void {
       inputSchema: {
         system: z.string().describe("System ID, from list_systems"),
       },
-      outputSchema: FeedHealthResponseSchema,
+      outputSchema: portableOutputSchema(FeedHealthResponseSchema),
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,

@@ -11,6 +11,7 @@ import {
   jsonResponse,
   errorResponse,
   getReadyDb,
+  portableOutputSchema,
 } from "./helpers.js";
 
 export function registerRouteTools(ctx: ToolContext): void {
@@ -50,7 +51,7 @@ export function registerRouteTools(ctx: ToolContext): void {
           .default(0)
           .describe("Pagination offset"),
       },
-      outputSchema: ListRoutesResponseSchema,
+      outputSchema: portableOutputSchema(ListRoutesResponseSchema),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
@@ -96,7 +97,7 @@ export function registerRouteTools(ctx: ToolContext): void {
             "Agency-defined direction 0 or 1 (semantics vary — call without this to see both, each with its headsign)"
           ),
       },
-      outputSchema: RouteDetailsResponseSchema,
+      outputSchema: portableOutputSchema(RouteDetailsResponseSchema),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,

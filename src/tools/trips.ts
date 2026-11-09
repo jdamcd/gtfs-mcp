@@ -20,6 +20,7 @@ import {
   errorResponse,
   getReadyDb,
   fetchRealtime,
+  portableOutputSchema,
 } from "./helpers.js";
 
 export function registerTripTools(ctx: ToolContext): void {
@@ -33,7 +34,7 @@ export function registerTripTools(ctx: ToolContext): void {
         system: z.string().describe("System ID, from list_systems"),
         trip_id: z.string().describe("Trip ID, from get_arrivals"),
       },
-      outputSchema: TripDetailsResponseSchema,
+      outputSchema: portableOutputSchema(TripDetailsResponseSchema),
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,

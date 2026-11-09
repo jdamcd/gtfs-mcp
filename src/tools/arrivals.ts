@@ -36,6 +36,7 @@ import {
   jsonResponse,
   getReadyDb,
   fetchRealtime,
+  portableOutputSchema,
 } from "./helpers.js";
 
 type Sortable = { arrival: Arrival; absMs: number };
@@ -61,7 +62,7 @@ export function registerArrivalTools(ctx: ToolContext): void {
           .default(10)
           .describe("Maximum number of arrivals to return"),
       },
-      outputSchema: ArrivalsResponseSchema,
+      outputSchema: portableOutputSchema(ArrivalsResponseSchema),
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,

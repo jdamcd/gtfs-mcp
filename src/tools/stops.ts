@@ -12,6 +12,7 @@ import {
   unknownStopResponse,
   jsonResponse,
   getReadyDb,
+  portableOutputSchema,
 } from "./helpers.js";
 
 export function registerStopTools(ctx: ToolContext): void {
@@ -32,7 +33,7 @@ export function registerStopTools(ctx: ToolContext): void {
           .default(10)
           .describe("Maximum number of results"),
       },
-      outputSchema: SearchStopsResponseSchema,
+      outputSchema: portableOutputSchema(SearchStopsResponseSchema),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
@@ -88,7 +89,7 @@ export function registerStopTools(ctx: ToolContext): void {
           .default(10)
           .describe("Maximum number of results"),
       },
-      outputSchema: NearbyStopsResponseSchema,
+      outputSchema: portableOutputSchema(NearbyStopsResponseSchema),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
@@ -125,7 +126,7 @@ export function registerStopTools(ctx: ToolContext): void {
           .string()
           .describe("Stop ID from search_stops / find_nearby_stops / get_route"),
       },
-      outputSchema: StopDetailsResponseSchema,
+      outputSchema: portableOutputSchema(StopDetailsResponseSchema),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,

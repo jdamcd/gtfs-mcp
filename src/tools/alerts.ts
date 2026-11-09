@@ -25,6 +25,7 @@ import {
   errorResponse,
   fetchRealtime,
   getReadyDb,
+  portableOutputSchema,
 } from "./helpers.js";
 
 function getTranslatedText(
@@ -113,7 +114,7 @@ export function registerAlertTools(ctx: ToolContext): void {
             "Include alerts whose active_period does not cover the current time. Pass route_id or this will return every planned alert on the system."
           ),
       },
-      outputSchema: AlertsResponseSchema,
+      outputSchema: portableOutputSchema(AlertsResponseSchema),
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
