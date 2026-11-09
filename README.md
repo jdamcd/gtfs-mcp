@@ -43,7 +43,7 @@ Restart Claude Desktop and ask an NYC transit question. The server downloads the
 
 ### Running with Docker
 
-You can build and run `gtfs-mcp` using Docker.
+You can build and run `gtfs-mcp` using Docker. The image reads its config from `/config/config.json` and stores schedule databases under `/data`, so mount a config file and a volume at those paths. The volume keeps schedules across container restarts.
 
 #### Build the image
 
@@ -99,6 +99,8 @@ The server reads a JSON config defining one or more transit systems, pointed to 
   "pre_warm_database": "setup"
 }
 ```
+
+`GTFS_MCP_DATA_DIR` overrides `data_dir` when set, so one config file can serve installs that store data in different places.
 
 `pre_warm_database` controls when schedules are downloaded:
 

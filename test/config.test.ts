@@ -222,6 +222,23 @@ describe("loadConfig", () => {
     expect(config.data_dir).toContain("/.gtfs-mcp/data");
   });
 
+  it("lets GTFS_MCP_DATA_DIR override data_dir", () => {
+    const configPath = join(TMP_DIR, "config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        systems: [],
+        data_dir: "/tmp/from-file",
+      })
+    );
+
+    process.env.GTFS_MCP_CONFIG = configPath;
+    process.env.GTFS_MCP_DATA_DIR = "~/from-env";
+    const config = loadConfig();
+    expect(config.data_dir).not.toContain("~");
+    expect(config.data_dir).toMatch(/\/from-env$/);
+  });
+
   it("throws on invalid JSON", () => {
     const configPath = join(TMP_DIR, "bad.json");
     writeFileSync(configPath, "not json{{{");

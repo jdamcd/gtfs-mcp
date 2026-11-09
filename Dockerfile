@@ -28,6 +28,7 @@ COPY --from=builder --chown=node:node /app/dist ./dist
 
 ENV NODE_ENV=production
 ENV GTFS_MCP_CONFIG=/config/config.json
+ENV GTFS_MCP_DATA_DIR=/data
 ENV PORT=3000
 ENV HOST=0.0.0.0
 

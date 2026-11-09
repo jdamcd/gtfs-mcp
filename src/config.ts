@@ -70,8 +70,8 @@ export function loadConfig(): AppConfig {
   const json = JSON.parse(raw);
   const config = AppConfigSchema.parse(json);
 
-  // Resolve ~ in data_dir
-  config.data_dir = config.data_dir.replace(/^~/, homedir());
+  const dataDir = process.env.GTFS_MCP_DATA_DIR || config.data_dir;
+  config.data_dir = dataDir.replace(/^~/, homedir());
 
   return config;
 }
