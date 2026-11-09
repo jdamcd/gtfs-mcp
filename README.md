@@ -1,6 +1,6 @@
 # GTFS MCP
 
-This is an MCP server for querying public transit info from GTFS schedules and GTFS-RT realtime feeds. It works with any GTFS-compatible transit system, and includes a ready-to-use config for NYC Subway (MTA).
+An MCP server for querying public transit info from GTFS schedules and GTFS-RT realtime feeds. It works with any GTFS-compatible transit system, and includes a ready-to-use config for NYC Subway (MTA).
 
 Ask things like *"When's the next L from Bedford Av?"*, *"Any service alerts on the G?"*, or *"What stops does the 7 train serve?"*.
 
@@ -14,7 +14,7 @@ Ask things like *"When's the next L from Bedford Av?"*, *"Any service alerts on 
 
 ## Quickstart
 
-Requires Node 22+.
+Requires Node 22+ to build from source. (Or use the published container image, via [Running with Docker](#running-with-docker).)
 
 ```bash
 git clone https://github.com/jdamcd/gtfs-mcp.git && cd gtfs-mcp
@@ -42,28 +42,26 @@ Restart Claude Desktop and ask an NYC transit question. The server downloads the
 
 ## Running with Docker
 
-You can build and run `gtfs-mcp` using Docker. The image reads its config from `/config/config.json` and stores schedule databases under `/data`, so mount a config file and a volume at those paths. The volume keeps schedules across container restarts.
-
-### Build the image
+An image for amd64 and arm64 is published to GitHub Container Registry for each release:
 
 ```bash
-docker build -t gtfs-mcp .
+docker pull ghcr.io/jdamcd/gtfs-mcp
 ```
 
-### Run with stdio transport (interactive / CLI)
+The image reads its config from `/config/config.json` and stores schedule databases under `/data` (via `GTFS_MCP_DATA_DIR`, which overrides the config's `data_dir`), so mount a config file and a volume at those paths. The volume keeps schedules across container restarts.
+
+### Run with stdio transport
 
 ```bash
 docker run -i --rm \
   -v $(pwd)/config.mta.json:/config/config.json:ro \
   -v gtfs-data:/data \
-  gtfs-mcp
+  ghcr.io/jdamcd/gtfs-mcp
 ```
 
 ### Use from Claude Desktop
 
 Use the Docker command above in `claude_desktop_config.json`. An absolute path is required for the config file.
-
-For an [authenticated feed](#authenticated-feeds), keep the key in the `env` block and add `"-e", "MY_API_KEY"` to `args`, which forwards that variable from the `docker` process into the container. On the command line the same flag reads it from your shell.
 
 ### Run with Streamable HTTP transport
 
@@ -74,7 +72,7 @@ docker run -d --rm \
   -e GTFS_MCP_TRANSPORT=http \
   -v $(pwd)/config.mta.json:/config/config.json:ro \
   -v gtfs-data:/data \
-  gtfs-mcp
+  ghcr.io/jdamcd/gtfs-mcp
 ```
 
 The server accepts requests addressed to `localhost:3000`. If you map a different host port, set `MCP_ALLOWED_HOSTS=localhost:<port>` to match.
@@ -105,8 +103,6 @@ The server reads a JSON config defining one or more transit systems, pointed to 
 }
 ```
 
-`GTFS_MCP_DATA_DIR` overrides `data_dir` when set, so one config file can serve installs that store data in different places.
-
 `pre_warm_database` controls when schedules are downloaded:
 
 - `"setup"` (default): any system without a schedule yet is downloaded when the server starts, rather than on its first query. A schedule older than `schedule_refresh_hours` is refreshed in the background on the next query for that system, so an unused system is never re-downloaded. Suits a local install.
@@ -119,7 +115,7 @@ Each realtime feed type accepts multiple URLs (e.g. MTA splits trip updates acro
 
 ### Authenticated feeds
 
-Some transit APIs require an API key. Keys are read from environment variables at runtime. Set them in the Claude Desktop `env` block alongside `GTFS_MCP_CONFIG`. With Docker, also pass each one into the container with `-e MY_API_KEY`.
+Some transit APIs require an API key. Keys are read from environment variables at runtime. Set them in the Claude Desktop `env` block alongside `GTFS_MCP_CONFIG`. With Docker, also forward each one into the container: `-e MY_API_KEY` on the command line, or `"-e", "MY_API_KEY"` in the Claude Desktop `args`.
 
 **Query parameter**:
 ```json
@@ -177,7 +173,7 @@ Clients that support resources (Claude Desktop, MCP Inspector) can attach this a
 |------|-------------|-----------|
 | `transit-status` | Summary of currently-active alerts across configured systems. In Claude Desktop this appears in the attachment ("+") menu. | `system?` — optional system ID to scope to one system. |
 
-The prompt returns a steering message that instructs the model to call `get_alerts` for the relevant system(s) and produce a tight summary. The model still does the work via tool calls — the prompt is just the framing.
+The prompt returns a steering message that instructs the model to call `get_alerts` for the relevant system(s) and produce a tight summary.
 
 ## Development
 
