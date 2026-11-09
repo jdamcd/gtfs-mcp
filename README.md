@@ -41,6 +41,39 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
 
 Restart Claude Desktop and ask an NYC transit question. The server downloads the GTFS schedule when it first starts (~15s for MTA), so a question asked straight away waits for it to finish.
 
+### Running with Docker
+
+You can build and run `gtfs-mcp` using Docker.
+
+#### Build the image
+
+```bash
+docker build -t gtfs-mcp .
+```
+
+#### Run with stdio transport (interactive / CLI)
+
+```bash
+docker run -i --rm \
+  -v $(pwd)/config.mta.json:/config/config.json:ro \
+  -v gtfs-data:/data \
+  gtfs-mcp
+```
+
+#### Run with Streamable HTTP transport
+
+```bash
+docker run -d --rm \
+  --name gtfs-mcp \
+  -p 127.0.0.1:3000:3000 \
+  -e GTFS_MCP_TRANSPORT=http \
+  -v $(pwd)/config.mta.json:/config/config.json:ro \
+  -v gtfs-data:/data \
+  gtfs-mcp
+```
+
+The server accepts requests addressed to `localhost:3000`. If you map a different host port, set `MCP_ALLOWED_HOSTS=localhost:<port>` to match.
+
 ### Adding other transit systems
 
 The server reads a JSON config defining one or more transit systems, pointed to by `GTFS_MCP_CONFIG`. Find feeds for your local agency in the [Mobility Database](https://mobilitydatabase.org/).
