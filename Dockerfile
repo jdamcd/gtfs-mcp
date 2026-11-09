@@ -1,8 +1,7 @@
 # Build stage
 FROM node:22-alpine3.21 AS builder
 
-RUN apk update && apk upgrade --no-cache && \
-    apk add --no-cache git
+RUN apk upgrade --no-cache
 
 WORKDIR /app
 
@@ -16,7 +15,7 @@ RUN npm run build && \
 # Production stage
 FROM node:22-alpine3.21
 
-RUN apk update && apk upgrade --no-cache && \
+RUN apk upgrade --no-cache && \
     mkdir -p /data /app && \
     chown -R node:node /data /app
 

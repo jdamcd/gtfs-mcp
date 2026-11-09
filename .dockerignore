@@ -7,3 +7,11 @@ data-testing
 campaign-results
 *.log
 .env
+test
+scripts
+evals
+readme_img
+config.*.json
+promptfooconfig.yaml
+vitest.config.ts
+*.md
