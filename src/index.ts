@@ -22,10 +22,23 @@ async function main(): Promise<void> {
   );
 
   // One factory answers both the 2025-era initialize and the 2026-07-28 discover.
-  serveStdio(() => createServer(config));
+  const handle = serveStdio(() => createServer(config));
 
   console.error("[gtfs-mcp] Server started on stdio transport");
   void preWarmDatabases(config);
+
+  // As PID 1 in a container, node ignores signals it has no handler for, so
+  // without these `docker stop` waits out its grace period and kills the process.
+  let shuttingDown = false;
+  const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.error(`[gtfs-mcp] Received ${signal}, shutting down...`);
+    await handle.close();
+    process.exit(0);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
 
 main().catch((error) => {
