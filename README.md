@@ -8,7 +8,6 @@ Ask things like *"When's the next L from Bedford Av?"*, *"Any service alerts on 
 
 ![Asking Claude about G train service alerts at Nassau Av](readme_img/example_alerts.png)
 
-
 **Arrivals example**
 
 ![Asking Claude about L train arrival times from Bedford Av](readme_img/example_arrivals.png)
@@ -41,17 +40,17 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
 
 Restart Claude Desktop and ask an NYC transit question. The server downloads the GTFS schedule when it first starts (~15s for MTA), so a question asked straight away waits for it to finish.
 
-### Running with Docker
+## Running with Docker
 
 You can build and run `gtfs-mcp` using Docker. The image reads its config from `/config/config.json` and stores schedule databases under `/data`, so mount a config file and a volume at those paths. The volume keeps schedules across container restarts.
 
-#### Build the image
+### Build the image
 
 ```bash
 docker build -t gtfs-mcp .
 ```
 
-#### Run with stdio transport (interactive / CLI)
+### Run with stdio transport (interactive / CLI)
 
 ```bash
 docker run -i --rm \
@@ -60,7 +59,13 @@ docker run -i --rm \
   gtfs-mcp
 ```
 
-#### Run with Streamable HTTP transport
+### Use from Claude Desktop
+
+Use the Docker command above in `claude_desktop_config.json`. An absolute path is required for the config file.
+
+For an [authenticated feed](#authenticated-feeds), keep the key in the `env` block and add `"-e", "MY_API_KEY"` to `args`, which forwards that variable from the `docker` process into the container. On the command line the same flag reads it from your shell.
+
+### Run with Streamable HTTP transport
 
 ```bash
 docker run -d --rm \
@@ -74,7 +79,7 @@ docker run -d --rm \
 
 The server accepts requests addressed to `localhost:3000`. If you map a different host port, set `MCP_ALLOWED_HOSTS=localhost:<port>` to match.
 
-### Adding other transit systems
+## Adding other transit systems
 
 The server reads a JSON config defining one or more transit systems, pointed to by `GTFS_MCP_CONFIG`. Find feeds for your local agency in the [Mobility Database](https://mobilitydatabase.org/).
 
@@ -114,7 +119,7 @@ Each realtime feed type accepts multiple URLs (e.g. MTA splits trip updates acro
 
 ### Authenticated feeds
 
-Some transit APIs require an API key. Keys are read from environment variables at runtime. Set them in the Claude Desktop `env` block alongside `GTFS_MCP_CONFIG`.
+Some transit APIs require an API key. Keys are read from environment variables at runtime. Set them in the Claude Desktop `env` block alongside `GTFS_MCP_CONFIG`. With Docker, also pass each one into the container with `-e MY_API_KEY`.
 
 **Query parameter**:
 ```json
