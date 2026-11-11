@@ -14,7 +14,7 @@ Ask things like *"When's the next L from Bedford Av?"*, *"Any service alerts on 
 
 ## Quickstart
 
-Requires Node 22+ to build from source. (Or use the published container image, via [Running with Docker](#running-with-docker).)
+Requires Node 22+, or use the [Docker image](#running-with-docker).
 
 ```bash
 git clone https://github.com/jdamcd/gtfs-mcp.git && cd gtfs-mcp
@@ -38,19 +38,19 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
 }
 ```
 
-Restart Claude Desktop and ask an NYC transit question. The server downloads the GTFS schedule when it first starts (~15s for MTA), so a question asked straight away waits for it to finish.
+Restart Claude Desktop and ask an NYC transit question. The schedule downloads when the server first starts (~15s for MTA).
 
 ## Running with Docker
 
-An image for amd64 and arm64 is published to GitHub Container Registry for each release:
+Images for amd64 and arm64 are published to GitHub Container Registry for each release:
 
 ```bash
 docker pull ghcr.io/jdamcd/gtfs-mcp
 ```
 
-The image reads its config from `/config/config.json` and stores schedule databases under `/data` (via `GTFS_MCP_DATA_DIR`, which overrides the config's `data_dir`), so mount a config file and a volume at those paths. The volume keeps schedules across container restarts.
+Mount a config file at `/config/config.json` and a volume at `/data`. This keeps schedules across restarts and takes the place of the config's `data_dir`.
 
-### Run with stdio transport
+### Run locally with stdio transport
 
 ```bash
 docker run -i --rm \
@@ -59,23 +59,24 @@ docker run -i --rm \
   ghcr.io/jdamcd/gtfs-mcp
 ```
 
-### Use from Claude Desktop
+To use it from Claude Desktop, put this command in `claude_desktop_config.json` with an absolute path to the config file.
 
-Use the Docker command above in `claude_desktop_config.json`. An absolute path is required for the config file.
+### Run on your network with Streamable HTTP transport
 
-### Run with Streamable HTTP transport
+On the host machine:
 
 ```bash
-docker run -d --rm \
+docker run -d --restart unless-stopped \
   --name gtfs-mcp \
-  -p 127.0.0.1:3000:3000 \
+  -p 3000:3000 \
   -e GTFS_MCP_TRANSPORT=http \
+  -e MCP_ALLOWED_HOSTS=myhost.local:3000 \
   -v $(pwd)/config.mta.json:/config/config.json:ro \
   -v gtfs-data:/data \
   ghcr.io/jdamcd/gtfs-mcp
 ```
 
-The server accepts requests addressed to `localhost:3000`. If you map a different host port, set `MCP_ALLOWED_HOSTS=localhost:<port>` to match.
+Clients connect to `http://myhost.local:3000/mcp`. Set `MCP_ALLOWED_HOSTS` to the host and port they use, since requests addressed to anything else are rejected. There's no authentication, so anyone who can reach the port can use the server.
 
 ## Adding other transit systems
 
@@ -105,30 +106,20 @@ The server reads a JSON config defining one or more transit systems, pointed to 
 
 `pre_warm_database` controls when schedules are downloaded:
 
-- `"setup"` (default): any system without a schedule yet is downloaded when the server starts, rather than on its first query. A schedule older than `schedule_refresh_hours` is refreshed in the background on the next query for that system, so an unused system is never re-downloaded. Suits a local install.
-- `"proactive"`: as above, but stale schedules are refreshed whether or not they are queried, at startup and then on an hourly check. Suits a long-running HTTP server.
-- `"off"`: nothing is downloaded until a system's first query.
+- `"setup"` (default): missing schedules at setup
+- `"proactive"`: at setup plus a regular check against `schedule_refresh_hours`
+- `"off"`: only when queried
+
+A schedule older than `schedule_refresh_hours` refreshes in the background on its next query in every mode.
 
 Each realtime feed type accepts multiple URLs (e.g. MTA splits trip updates across 8 feeds). Set any feed type to `[]` if the system doesn't provide it.
 
-`timezone` is the agency's IANA timezone (e.g. `"Europe/London"`). It's used to compare scheduled stop times to "now" and render times in responses regardless of server timezone.
+`timezone` is the agency's IANA timezone (e.g. `"Europe/London"`), so times are right whatever the server's timezone.
 
 ### Authenticated feeds
 
-Some transit APIs require an API key. Keys are read from environment variables at runtime. Set them in the Claude Desktop `env` block alongside `GTFS_MCP_CONFIG`. With Docker, also forward each one into the container: `-e MY_API_KEY` on the command line, or `"-e", "MY_API_KEY"` in the Claude Desktop `args`.
+For feeds that need an API key, `auth` names the environment variable to read it from, and sends it as a header or a query parameter:
 
-**Query parameter**:
-```json
-{
-  "auth": {
-    "type": "query_param",
-    "param_name": "api_key",
-    "key_env": "MY_API_KEY"
-  }
-}
-```
-
-**Header:**
 ```json
 {
   "auth": {
@@ -139,7 +130,7 @@ Some transit APIs require an API key. Keys are read from environment variables a
 }
 ```
 
-Set `auth` to `null` for systems that don't require authentication.
+For a query parameter, use `"type": "query_param"` with `param_name` in place of `header_name`. Set the variable in the Claude Desktop `env` block. With Docker, also forward it with `-e MY_API_KEY`.
 
 ## Tools
 
@@ -157,23 +148,12 @@ Set `auth` to `null` for systems that don't require authentication.
 | `get_trip` | Trip stop sequence with realtime delays | `system`, `trip_id` |
 | `get_feed_health` | Realtime feed diagnostics: per-URL fetch results, entity counts, oldest header age | `system` |
 
-The `system` parameter is the system ID from your config (e.g. `"mta-subway"`). IDs flow between tools — e.g. `search_stops` returns a `stop_id` that `get_arrivals` consumes.
+`system` is a system `id` from your config, such as `"mta-subway"`.
 
-## Resources
+## Resources and prompts
 
-| URI | Description |
-|-----|-------------|
-| `gtfs://systems` | Markdown overview of every configured system: id, name, timezone, and how many realtime feed URLs are wired up per feed type. |
-
-Clients that support resources (Claude Desktop, MCP Inspector) can attach this as context — handy for grounding a conversation in which systems the server actually knows about, without invoking `list_systems`.
-
-## Prompts
-
-| Name | Description | Arguments |
-|------|-------------|-----------|
-| `transit-status` | Summary of currently-active alerts across configured systems. In Claude Desktop this appears in the attachment ("+") menu. | `system?` — optional system ID to scope to one system. |
-
-The prompt returns a steering message that instructs the model to call `get_alerts` for the relevant system(s) and produce a tight summary.
+- `gtfs://systems` (resource): an overview of the configured systems and their realtime feeds, to attach as context.
+- `transit-status` (prompt): a summary of active alerts, optionally for one `system`. In Claude Desktop it's in the "+" menu.
 
 ## Development
 
@@ -183,21 +163,21 @@ npm test
 
 ### Evals
 
-LLM evals use [promptfoo](https://promptfoo.dev/) to verify that a model selects the correct tools for natural-language transit queries. Each case runs against Claude Haiku 5.5, Sonnet 5.5 and Opus 5.5 with identical settings. Requires `ANTHROPIC_API_KEY` and `GTFS_MCP_CONFIG` set in `.env` or the environment. promptfoo isn't a project dependency: the eval scripts run a pinned version with `npx`, which downloads it on first use.
+LLM evals use [promptfoo](https://promptfoo.dev/) to verify that a model selects the correct tools for natural-language transit queries. Each case runs against Claude Haiku 5.5, Sonnet 5.5 and Opus 5.5. Requires `ANTHROPIC_API_KEY` and `GTFS_MCP_CONFIG` in `.env` or the environment.
 
 ```bash
 npm run build
-npm run eval:smoke    # one pass on Haiku only: cheap check that the setup works
-npm run eval          # all models, 3 repeats each, then prints a summary
+npm run eval:smoke    # one pass on Haiku only
+npm run eval          # all 3 models, 3 repeats each
 npm run eval:summary  # re-print the summary for the last full run
 npm run eval:view     # web UI to inspect individual responses
 ```
 
-The summary reports each model's pass rate with a 95% confidence interval, which cases pass inconsistently across repeats, token usage and estimated cost. API errors (rate limits, timeouts) are counted separately and don't affect pass rates.
+The summary gives each model's pass rate with a 95% confidence interval, cases that pass inconsistently across repeats, tokens and estimated cost.
 
 ### MCP inspector
 
-Test tools interactively without a Claude client:
+Test tools interactively without an LLM client:
 
 ```bash
 GTFS_MCP_CONFIG=./config.mta.json npx @modelcontextprotocol/inspector node dist/index.js
