@@ -121,6 +121,27 @@ export function makeTripRouteResolver(
   return (tripId) => (stmt.get(tripId) as string | undefined) ?? null;
 }
 
+// The name riders know a route by. route_id is often an internal key.
+export function makeRouteNameResolver(
+  db: GtfsDb
+): (routeId: string) => string | null {
+  const stmt = db.prepare(
+    `SELECT route_short_name, route_long_name FROM routes WHERE route_id = ?`
+  );
+  const cache = new Map<string, string | null>();
+  return (routeId) => {
+    let name = cache.get(routeId);
+    if (name === undefined) {
+      const row = stmt.get(routeId) as
+        | Pick<RouteResult, "route_short_name" | "route_long_name">
+        | undefined;
+      name = row?.route_short_name || row?.route_long_name || null;
+      cache.set(routeId, name);
+    }
+    return name;
+  };
+}
+
 export function resolveStopIds(db: GtfsDb, stopId: string): string[] {
   const children = db
     .prepare(`SELECT stop_id FROM stops WHERE parent_station = ?`)

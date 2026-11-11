@@ -578,6 +578,42 @@ describe("get_arrivals", () => {
     }
   });
 
+  it("names the route of realtime and scheduled arrivals", async () => {
+    const fakeNow = new Date("2026-04-20T07:00:00-04:00");
+    const arrivalSecs = Math.floor(fakeNow.getTime() / 1000) + 300;
+    const feed = encodeTripUpdateFeed([
+      { tripId: "T1", routeId: "R1", stopTimeUpdates: [{ stopId: "S2", arrivalTime: arrivalSecs }] },
+      { tripId: "T_RT_ONLY", stopTimeUpdates: [{ stopId: "S2", arrivalTime: arrivalSecs + 60 }] },
+    ]);
+    const { clearFeedCache } = await import("../src/gtfs/realtime.js");
+    clearFeedCache();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) =>
+      String(url).includes("trip-updates")
+        ? new Response(feed, { status: 200 })
+        : new Response(new Uint8Array(), { status: 200 })
+    );
+    vi.useFakeTimers({ now: fakeNow });
+    try {
+      const result = await client.callTool({
+        name: "get_arrivals",
+        arguments: { system: "test", stop_id: "S2" },
+      });
+      const byTrip = new Map(
+        getJsonContent(result).arrivals.map((a: any) => [
+          a.trip_id,
+          [a.is_realtime, a.route_id, a.route_name],
+        ])
+      );
+      expect(byTrip.get("T1")).toEqual([true, "R1", "1"]);
+      expect(byTrip.get("T3")).toEqual([false, "R2", "2"]);
+      expect(byTrip.get("T_RT_ONLY")).toEqual([true, "unknown", null]);
+    } finally {
+      vi.useRealTimers();
+      clearFeedCache();
+      vi.spyOn(globalThis, "fetch").mockImplementation(defaultFetch);
+    }
+  });
+
   it("merges realtime with scheduled beyond the RT window", async () => {
     // Pin to early morning so scheduled S1S arrival at 09:20 is in the
     // future. Realtime has no data for S1S, so scheduled fills in entirely.

@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   getScheduledArrivals,
   getStop,
+  makeRouteNameResolver,
   makeStopNameResolver,
   makeTripRouteResolver,
   resolveStopIds,
@@ -78,6 +79,7 @@ export function registerArrivalTools(ctx: ToolContext): void {
       const stopIdSet = new Set(stopIds);
       const resolveHeadsign = makeStopNameResolver(db);
       const resolveTripRoute = makeTripRouteResolver(db);
+      const resolveRouteName = makeRouteNameResolver(db);
       const nowMs = Date.now();
       const tz = config.timezone;
 
@@ -167,6 +169,7 @@ export function registerArrivalTools(ctx: ToolContext): void {
             arrival: {
               trip_id: tripId,
               route_id: tripRouteId ?? "unknown",
+              route_name: tripRouteId ? resolveRouteName(tripRouteId) : null,
               stop_id: stu.stopId,
               arrival_time: formatLocalTime(new Date(absMs), tz),
               minutes_away,
@@ -217,6 +220,7 @@ export function registerArrivalTools(ctx: ToolContext): void {
             arrival: {
               trip_id: row.trip_id,
               route_id: row.route_id,
+              route_name: resolveRouteName(row.route_id),
               stop_id: row.stop_id,
               arrival_time: formatLocalTime(new Date(absMs), tz),
               minutes_away: Math.round((absMs - nowMs) / 60_000),

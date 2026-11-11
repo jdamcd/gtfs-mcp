@@ -42,6 +42,7 @@ export const SystemEntrySchema = z.object({
 export const ArrivalSchema = z.object({
   trip_id: z.string(),
   route_id: z.string(),
+  route_name: z.string().nullable(),
   stop_id: z.string(),
   arrival_time: z.string(),
   minutes_away: z.number().nullable(),

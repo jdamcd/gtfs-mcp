@@ -8,6 +8,7 @@ import {
   listRoutes,
   getRouteDetails,
   getTripDetails,
+  makeRouteNameResolver,
 } from "../src/gtfs/queries.js";
 
 let db: any;
@@ -271,5 +272,21 @@ describe("getTripDetails", () => {
     const details = getTripDetails(db, "INVALID");
     expect(details.trip).toBeNull();
     expect(details.stop_times).toEqual([]);
+  });
+});
+
+describe("makeRouteNameResolver", () => {
+  it("prefers the short name and falls back to the long name", () => {
+    db.prepare(
+      `INSERT INTO routes (route_id, route_long_name, route_type) VALUES ('R_LONG', 'Airport Line', 2)`
+    ).run();
+    try {
+      const routeName = makeRouteNameResolver(db);
+      expect(routeName("R1")).toBe("1");
+      expect(routeName("R_LONG")).toBe("Airport Line");
+      expect(routeName("R_MISSING")).toBeNull();
+    } finally {
+      db.prepare(`DELETE FROM routes WHERE route_id = 'R_LONG'`).run();
+    }
   });
 });
