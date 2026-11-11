@@ -1,5 +1,5 @@
 # Build stage
-FROM node:22-alpine3.21 AS builder
+FROM node:22-alpine AS builder
 
 RUN apk upgrade --no-cache
 
@@ -13,7 +13,7 @@ RUN npm run build && \
     npm prune --omit=dev
 
 # Production stage
-FROM node:22-alpine3.21
+FROM node:22-alpine
 
 RUN apk upgrade --no-cache && \
     mkdir -p /data /app && \
