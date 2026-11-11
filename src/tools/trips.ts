@@ -154,7 +154,7 @@ function synthesiseTripFromRt(
   return {
     trip: {
       trip_id: tripId,
-      route_id: tripUpdate.trip?.routeId ?? null,
+      route_id: tripUpdate.trip?.routeId || null,
       service_id: null,
       trip_headsign: lastStopId ? resolveName(lastStopId) : null,
       direction_id: rtField(tripUpdate.trip, "directionId"),

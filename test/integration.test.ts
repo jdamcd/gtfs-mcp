@@ -867,6 +867,34 @@ describe("get_trip", () => {
     // No stop_sequence in the feed, so it falls back to position
     expect(data.stop_times.map((st: any) => st.stop_sequence)).toEqual([0, 1]);
   });
+
+  it("reports no route for a realtime-only trip when the feed leaves route_id out", async () => {
+    const feed = encodeTripUpdateFeed([
+      {
+        tripId: "T_NO_ROUTE",
+        stopTimeUpdates: [
+          { stopId: "S2", arrivalTime: Math.floor(Date.now() / 1000) + 300 },
+        ],
+      },
+    ]);
+    const { clearFeedCache } = await import("../src/gtfs/realtime.js");
+    clearFeedCache();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) =>
+      String(url).includes("trip-updates")
+        ? new Response(feed, { status: 200 })
+        : new Response(new Uint8Array(), { status: 200 })
+    );
+    try {
+      const result = await client.callTool({
+        name: "get_trip",
+        arguments: { system: "test", trip_id: "T_NO_ROUTE" },
+      });
+      expect(getJsonContent(result).trip.route_id).toBeNull();
+    } finally {
+      clearFeedCache();
+      vi.spyOn(globalThis, "fetch").mockImplementation(defaultFetch);
+    }
+  });
 });
 
 describe("get_feed_health", () => {
