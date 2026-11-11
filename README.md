@@ -180,7 +180,7 @@ The summary gives each model's pass rate with a 95% confidence interval, cases t
 Test tools interactively without an LLM client:
 
 ```bash
-GTFS_MCP_CONFIG=./config.mta.json npx @modelcontextprotocol/inspector node dist/index.js
+npx @modelcontextprotocol/inspector -e GTFS_MCP_CONFIG=./config.mta.json node dist/index.js
 ```
 
 ### Invariant testing
