@@ -14,6 +14,15 @@ COPY src/ ./src/
 RUN npm run build && \
     npm prune --omit=dev
 
+# better-sqlite3 ships a binary for every platform and the SQLite source.
+# Keep the one binary this image loads; the last line fails the build if
+# that went wrong.
+RUN cd node_modules/better-sqlite3 && \
+    keep="$(basename "$(node -p "require('./lib/binding.js').getPrebuildPath()")")" && \
+    find prebuilds -type f ! -name "$keep" -delete && \
+    rm -rf deps src && \
+    node -e "new (require('better-sqlite3'))(':memory:')"
+
 # Production stage
 FROM node:22-alpine
 
