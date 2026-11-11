@@ -1,76 +1,55 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Build and Run
+## Build and test
 
 ```bash
-npm install
-npm run build          # tsc → dist/
-npm test               # vitest run (all tests)
-npm run test:watch     # vitest in watch mode
-npx vitest run test/integration.test.ts  # single test file
+npm run build                                           # tsc → dist/
+npm test                                                # vitest, all tests
+npx vitest run test/integration.test.ts                 # one file
+GTFS_MCP_CONFIG=./config.mta.json npm start             # stdio
+GTFS_MCP_CONFIG=./config.mta.json npm run start:http    # Streamable HTTP on 127.0.0.1:3000
 ```
 
-Run the server locally:
-```bash
-GTFS_MCP_CONFIG=./config.mta.json npm start
-```
-
-Test with MCP inspector:
-```bash
-GTFS_MCP_CONFIG=./config.mta.json npx @modelcontextprotocol/inspector node dist/index.js
-```
-
-CI runs build + test on Node 22, 24.
+CI runs build + test on Node 22 and 24.
 
 ## Architecture
 
-This is an MCP (Model Context Protocol) server that exposes GTFS transit data as tools. It runs over stdio inside Claude Desktop or similar MCP clients, or over Streamable HTTP with `--http`. It uses the SDK 2.x packages (`@modelcontextprotocol/server` and `/node`; `/client` in tests only), which serve both the 2026-07-28 protocol revision and 2025-era clients from the same server factory.
+An MCP server exposing GTFS transit data as tools, over stdio or Streamable HTTP (`--http` or `GTFS_MCP_TRANSPORT=http`). It uses the SDK 2.x packages (`@modelcontextprotocol/server` and `/node`; `/client` in tests only), which serve the 2026-07-28 protocol revision and 2025-era clients from one server factory.
 
-**Entry flow:** `src/index.ts` loads config → `src/server.ts` exports `createServer(config)`, which builds an `McpServer` and registers tool groups via a shared `ToolContext`. That function is the factory the SDK calls: `serveStdio` in `src/index.ts` calls it once per stdio connection, and `createMcpHandler` in `src/http.ts` calls it once per HTTP request. HTTP serving is stateless (no sessions); `src/http.ts` keeps its own Origin/Host checks and body cap in front of the SDK handler, which checks neither. Caches that must outlive a request (schedule DB, import lock, feed cache) live at module scope in `src/gtfs/`, not on the server instance.
+`createServer(config)` in `src/server.ts` is that factory: `serveStdio` (`src/index.ts`) calls it once per connection, `createMcpHandler` (`src/http.ts`) once per request. HTTP serving is stateless, and `src/http.ts` does its own Origin/Host checks and body cap because the SDK handler does neither. Anything that must outlive a request (schedule DB, import lock, feed cache) lives at module scope in `src/gtfs/`, not on the server instance.
 
-**Two data sources:**
-- **Static GTFS** (`src/gtfs/static.ts`): Downloads GTFS ZIP on first use, imports into a per-system SQLite DB at `data_dir/{system_id}/` using the `gtfs` npm package. Auto-refreshes when DB age exceeds `schedule_refresh_hours`. Deduplicates concurrent imports with a lock map.
-- **GTFS-RT** (`src/gtfs/realtime.ts`): Fetches protobuf feeds on demand via `gtfs-realtime-bindings`. 30-second in-memory cache. Multiple feed URLs per type are fetched in parallel and merged.
+- **Static GTFS** (`src/gtfs/static.ts`): the `gtfs` package imports each system's schedule into `data_dir/{system_id}/gtfs.db`, at startup per `pre_warm_database`. A stale DB keeps serving while a background refresh imports into a scratch file and renames it over.
+- **GTFS-RT** (`src/gtfs/realtime.ts`): feeds fetched on demand, in parallel across a type's URLs, with a 30-second cache.
+- **Tools** (`src/tools/`; `src/resources/` and `src/prompts/` work the same way): each file exports a `register*` function taking the shared `ToolContext`. Tools get the DB through `getReadyDb()` and query it with the raw SQL in `src/gtfs/queries.ts`. Each declares `outputSchema: portableOutputSchema(ZodSchema)` and returns `jsonResponse(data)`. The SDK validates `structuredContent` against a JSON Schema with `additionalProperties: false`, so a field added to a response but not to its schema fails the call.
+- **Config** (`src/config.ts`): Zod-validated JSON at `GTFS_MCP_CONFIG`. `GTFS_MCP_DATA_DIR` overrides `data_dir`.
 
-**Tool registration pattern:** Each file in `src/tools/` exports a `register*Tools(ctx: ToolContext)` function that registers one or more tools on the MCP server. Tools use `getReadyDb()` from `src/tools/helpers.ts` to ensure static data is loaded before querying. Queries live in `src/gtfs/queries.ts` as raw SQL against the SQLite DB.
+## Docker image
 
-**Config** (`src/config.ts`): Validated with Zod. Loaded from the JSON file at `GTFS_MCP_CONFIG` env var. Supports multiple transit systems, each with optional auth (header or query param, key read from env var at runtime).
-
-**Auth** (`src/auth.ts`): Applied to both static download and realtime feed URLs.
+- `.dockerignore` excludes most of the repo and the build stage copies only `package*.json`, `tsconfig.json` and `src/`, so a new file the server needs at runtime has to be added to both. `package.json` stays in the runtime stage because `src/server.ts` reads the version from it.
+- The image sets `HOST=0.0.0.0` (the code defaults to `127.0.0.1`), `GTFS_MCP_DATA_DIR=/data` and `GTFS_MCP_CONFIG=/config/config.json`.
+- `docker-publish.yml` builds on every PR and push to `main`, and publishes only on a `v*` tag or a manual dispatch. arm64 builds on a native runner. No QEMU: `npm ci` under emulation hung, which is also why there's no `linux/arm/v7` build.
+- To release: bump `version` in `package.json`, push a matching `vX.Y.Z` tag (publishes `X.Y.Z`, `X.Y` and `latest`), then create the GitHub Release by hand with `gh release create`. The `main` image tag only moves on a manual dispatch.
+- Nothing tests the image. After a Dockerfile change, `docker build -t gtfs-mcp .` and check a stdio session and an HTTP `initialize` against it.
 
 ## Testing
 
-Tests use vitest with `fileParallelism: false`. The integration test (`test/integration.test.ts`) is the main test — it:
-- Imports a fixture GTFS ZIP into a temp SQLite DB
-- Mocks `src/gtfs/static.ts` so no real download occurs
-- Mocks `fetch` to return encoded protobuf test data
-- Connects an MCP client to the server via `InMemoryTransport`
-- Tests all tools end-to-end
+`test/integration.test.ts` is the main test. It imports a fixture GTFS ZIP (built by `test/fixtures/create-gtfs-zip.ts`), mocks `src/gtfs/static.ts` and `fetch` (protobuf fixtures from `test/helpers.ts`), and runs every tool through `InMemoryTransport`. `vi.mock("../src/gtfs/static.js")` must come before importing `createServer` because of mock hoisting.
 
-Test helpers in `test/helpers.ts` encode protobuf feed fixtures. The GTFS ZIP fixture is built by `test/fixtures/create-gtfs-zip.ts`.
-
-`InMemoryTransport` only connects 2025-era instances, so `test/http.test.ts` is the only coverage of the 2026-07-28 path: it runs every tool test twice, with a default (legacy) client and with `versionNegotiation: { mode: "auto" }`, asserting the negotiated era each time.
-
-**Important:** `vi.mock("../src/gtfs/static.js")` must appear before importing `createServer` due to module mock hoisting.
+`InMemoryTransport` only connects 2025-era instances, so `test/http.test.ts` is the only coverage of the 2026-07-28 path: it runs every tool test with a default client and with `versionNegotiation: { mode: "auto" }`.
 
 ## Evals
 
-LLM evals use [promptfoo](https://promptfoo.dev/) to test that a model selects the correct MCP tools for natural-language transit queries. Config is in `promptfooconfig.yaml`.
+promptfoo checks that models pick the right tools for transit questions (`promptfooconfig.yaml`). Needs `ANTHROPIC_API_KEY` and `GTFS_MCP_CONFIG` in `.env`.
 
 ```bash
-npm run build          # evals run against dist/
-npm run eval:smoke     # single pass on Haiku 5.5 only
-npm run eval           # Haiku/Sonnet/Opus 5.5 × 3 repeats, then prints a summary (requires ANTHROPIC_API_KEY)
-npm run eval:summary   # re-print the summary of evals/results/latest.json
-npm run eval:view      # open web UI to inspect results
+npm run build && npm run eval:smoke   # evals run against dist/; one pass on Haiku
+npm run eval                          # Haiku/Sonnet/Opus 5.5 × 3 repeats, then a summary
+npm run eval:summary                  # re-print the summary of evals/results/latest.json
 ```
 
-promptfoo runs the full tool loop: it executes each MCP tool call against the real server and feeds the result back until the model answers (capped by `max_tool_calls`). Each case is graded by `evals/tool-calls.js`, which reads the calls promptfoo recorded in `response.metadata.toolCalls` and checks them against the case's `metadata.expect` (`require`, `order`, `noTools`, `only`). A required call only counts if it uses the system set once in `defaultTest.metadata.system`. Don't grade the output text: it's only the final answer, and it can name a tool the model never called. `evals/run.js` wraps `promptfoo eval` so the summary prints even when cases fail while the exit status stays promptfoo's (100 when any case fails). promptfoo isn't a devDependency: `run.js` and `eval:view` run it with `npx` at a pinned version, so bump both together. `evals/summarize.js` turns the results file into a per-model comparison (Wilson 95% CI, per-case consistency across repeats, tool calls per run, tokens, cost from its own price table, since promptfoo has no prices for the 5.5 models). Both are unit-tested in `test/eval-assertions.test.ts`.
-
-All providers share one config (YAML anchor) so only the model varies. `thinking: adaptive` must stay set: without it promptfoo sends `temperature: 0`, which the 5.5 models reject. `effort` is pinned to `medium` because the per-model defaults differ.
-
-Set `ANTHROPIC_API_KEY` and `GTFS_MCP_CONFIG` in `.env` (gitignored) or as environment variables. Evals use `config.mta.json`, so tools run against live MTA data: assert on the calls, not on what they return.
-
-The eval system prompt doesn't name the system, so the model has to discover it with `list_systems`. promptfoo doesn't pass the server's `instructions` to the model the way Claude Desktop does, so evals only test what the tool descriptions get across.
+- promptfoo runs the full tool loop against the real server with `config.mta.json`, so tools hit live MTA data: assert on the calls, not on what they return.
+- `evals/tool-calls.js` grades the calls in `response.metadata.toolCalls` against each case's `metadata.expect`. Don't grade the output text: it can name a tool the model never called. A required call only counts if it uses the system in `defaultTest.metadata.system`.
+- `evals/run.js` prints the summary even when cases fail, and exits with promptfoo's status (100 when any case fails).
+- promptfoo isn't a devDependency: `run.js` and the `eval:view` script pin its `npx` version, so bump both together.
+- `evals/summarize.js` has its own price table, since promptfoo has none for the 5.5 models. It and `tool-calls.js` are unit-tested in `test/eval-assertions.test.ts`.
+- The eval system prompt doesn't name the system, and promptfoo doesn't pass the server's `instructions` to the model, so evals only test what the tool descriptions get across.
