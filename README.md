@@ -140,7 +140,7 @@ For a query parameter, use `"type": "query_param"` with `param_name` in place of
 | `search_stops` | Search stops by name | `system`, `query`, `limit?` |
 | `find_nearby_stops` | Stops near a coordinate, ordered by distance | `system`, `lat`, `lon`, `radius_m?`, `limit?` |
 | `get_stop` | Stop details and routes serving it | `system`, `stop_id` |
-| `get_arrivals` | Upcoming arrivals with realtime delays | `system`, `stop_id`, `route_id?`, `limit?` |
+| `get_arrivals` | Upcoming arrivals, realtime where the feed has them and scheduled beyond | `system`, `stop_id`, `route_id?`, `limit?` |
 | `list_routes` | Routes in a system, with optional name filter and pagination | `system`, `query?`, `route_type?`, `limit?`, `offset?` |
 | `get_route` | Route details with ordered stops in each direction | `system`, `route_id`, `direction_id?` |
 | `get_alerts` | Active service alerts | `system`, `route_id?`, `stop_id?`, `include_inactive?` |
