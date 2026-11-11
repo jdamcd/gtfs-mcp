@@ -539,6 +539,45 @@ describe("get_arrivals", () => {
     }
   });
 
+  it("takes the route from the schedule when the feed leaves route_id out", async () => {
+    const fakeNow = new Date("2026-04-20T12:00:00-04:00");
+    const arrivalSecs = Math.floor(fakeNow.getTime() / 1000) + 300;
+    const feed = encodeTripUpdateFeed([
+      { tripId: "T3", stopTimeUpdates: [{ stopId: "S2", arrivalTime: arrivalSecs }] },
+      { tripId: "T1", stopTimeUpdates: [{ stopId: "S2", arrivalTime: arrivalSecs + 60 }] },
+      { tripId: "T_RT_ONLY", stopTimeUpdates: [{ stopId: "S2", arrivalTime: arrivalSecs + 120 }] },
+    ]);
+    const { clearFeedCache } = await import("../src/gtfs/realtime.js");
+    clearFeedCache();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) =>
+      String(url).includes("trip-updates")
+        ? new Response(feed, { status: 200 })
+        : new Response(new Uint8Array(), { status: 200 })
+    );
+    vi.useFakeTimers({ now: fakeNow });
+    try {
+      const routesByTrip = async (args: Record<string, string>) => {
+        const result = await client.callTool({
+          name: "get_arrivals",
+          arguments: { system: "test", stop_id: "S2", ...args },
+        });
+        return getJsonContent(result)
+          .arrivals.filter((a: any) => a.is_realtime)
+          .map((a: any) => [a.trip_id, a.route_id]);
+      };
+      expect(await routesByTrip({})).toEqual([
+        ["T3", "R2"],
+        ["T1", "R1"],
+        ["T_RT_ONLY", "unknown"],
+      ]);
+      expect(await routesByTrip({ route_id: "R2" })).toEqual([["T3", "R2"]]);
+    } finally {
+      vi.useRealTimers();
+      clearFeedCache();
+      vi.spyOn(globalThis, "fetch").mockImplementation(defaultFetch);
+    }
+  });
+
   it("merges realtime with scheduled beyond the RT window", async () => {
     // Pin to early morning so scheduled S1S arrival at 09:20 is in the
     // future. Realtime has no data for S1S, so scheduled fills in entirely.
@@ -733,6 +772,42 @@ describe("get_vehicles", () => {
     const vehicles = getJsonContent(result).vehicles;
     expect(vehicles.length).toBe(1);
     expect(vehicles[0].vehicle_id).toBe("V1");
+  });
+
+  it("takes the route from the schedule when the feed leaves route_id out", async () => {
+    const position = { latitude: 40.72, longitude: -74.01 };
+    const feed = encodeVehiclePositionFeed([
+      { vehicleId: "V1", tripId: "T1", ...position },
+      { vehicleId: "V2", tripId: "T3", ...position },
+      { vehicleId: "V3", tripId: "T_RT_ONLY", ...position },
+      { vehicleId: "V4", ...position },
+    ]);
+    const { clearFeedCache } = await import("../src/gtfs/realtime.js");
+    clearFeedCache();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) =>
+      String(url).includes("vehicle-positions")
+        ? new Response(feed, { status: 200 })
+        : new Response(new Uint8Array(), { status: 200 })
+    );
+    try {
+      const routesByVehicle = async (args: Record<string, string>) => {
+        const result = await client.callTool({
+          name: "get_vehicles",
+          arguments: { system: "test", ...args },
+        });
+        return getJsonContent(result).vehicles.map((v: any) => [v.vehicle_id, v.route_id]);
+      };
+      expect(await routesByVehicle({})).toEqual([
+        ["V1", "R1"],
+        ["V2", "R2"],
+        ["V3", null],
+        ["V4", null],
+      ]);
+      expect(await routesByVehicle({ route_id: "R2" })).toEqual([["V2", "R2"]]);
+    } finally {
+      clearFeedCache();
+      vi.spyOn(globalThis, "fetch").mockImplementation(defaultFetch);
+    }
   });
 });
 

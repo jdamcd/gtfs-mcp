@@ -1,9 +1,11 @@
+import type { transit_realtime as TransitRealtime } from "gtfs-realtime-bindings";
 import { z } from "zod";
 import {
   congestionLevelName,
   occupancyStatusName,
   vehicleStopStatusName,
 } from "../gtfs/enumNames.js";
+import { makeTripRouteResolver } from "../gtfs/queries.js";
 import { rtField } from "../gtfs/rtHelpers.js";
 import { extractRtTime, formatLocalTime } from "../time.js";
 import { VehiclesResponseSchema, type VehiclePosition } from "../types.js";
@@ -14,6 +16,7 @@ import {
   jsonResponse,
   errorResponse,
   fetchRealtime,
+  getReadyDb,
   portableOutputSchema,
 } from "./helpers.js";
 
@@ -51,10 +54,22 @@ export function registerVehicleTools(ctx: ToolContext): void {
       }
       const entities = rt.entities;
 
-      // Filter before transforming
+      // trip_id alone identifies a trip, so a feed may leave route_id out.
+      // The schedule is only opened for a feed that does.
+      const needsSchedule = entities.some(
+        (e) => e.vehicle?.trip?.tripId && !e.vehicle.trip.routeId
+      );
+      const resolveTripRoute = needsSchedule
+        ? makeTripRouteResolver(
+            await getReadyDb(config, ctx.dataDir, ctx.refreshHours)
+          )
+        : () => null;
+      const routeOf = (trip: TransitRealtime.ITripDescriptor | null | undefined) =>
+        trip?.routeId || (trip?.tripId ? resolveTripRoute(trip.tripId) : null);
+
       const filtered = entities.filter((e) => {
         if (!e.vehicle?.position) return false;
-        if (route_id && e.vehicle.trip?.routeId !== route_id) return false;
+        if (route_id && routeOf(e.vehicle.trip) !== route_id) return false;
         return true;
       });
 
@@ -65,7 +80,7 @@ export function registerVehicleTools(ctx: ToolContext): void {
         return {
           vehicle_id: v.vehicle?.id ?? null,
           trip_id: v.trip?.tripId ?? null,
-          route_id: v.trip?.routeId ?? null,
+          route_id: routeOf(v.trip),
           latitude: pos.latitude ?? 0,
           longitude: pos.longitude ?? 0,
           bearing: rtField(pos, "bearing"),

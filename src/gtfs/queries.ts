@@ -114,6 +114,13 @@ export function makeStopNameResolver(
   };
 }
 
+export function makeTripRouteResolver(
+  db: GtfsDb
+): (tripId: string) => string | null {
+  const stmt = db.prepare(`SELECT route_id FROM trips WHERE trip_id = ?`).pluck();
+  return (tripId) => (stmt.get(tripId) as string | undefined) ?? null;
+}
+
 export function resolveStopIds(db: GtfsDb, stopId: string): string[] {
   const children = db
     .prepare(`SELECT stop_id FROM stops WHERE parent_station = ?`)

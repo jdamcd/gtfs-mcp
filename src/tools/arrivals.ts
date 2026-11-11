@@ -3,6 +3,7 @@ import {
   getScheduledArrivals,
   getStop,
   makeStopNameResolver,
+  makeTripRouteResolver,
   resolveStopIds,
 } from "../gtfs/queries.js";
 import {
@@ -76,6 +77,7 @@ export function registerArrivalTools(ctx: ToolContext): void {
       const stopIds = resolveStopIds(db, stop_id);
       const stopIdSet = new Set(stopIds);
       const resolveHeadsign = makeStopNameResolver(db);
+      const resolveTripRoute = makeTripRouteResolver(db);
       const nowMs = Date.now();
       const tz = config.timezone;
 
@@ -116,7 +118,8 @@ export function registerArrivalTools(ctx: ToolContext): void {
         if (!tu?.trip?.tripId) continue;
 
         const tripId = tu.trip.tripId;
-        const tripRouteId = tu.trip.routeId ?? null;
+        // trip_id alone identifies a trip, so a feed may leave route_id out.
+        const tripRouteId = tu.trip.routeId || resolveTripRoute(tripId);
         if (route_id && tripRouteId !== route_id) continue;
 
         const tripSr = tu.trip.scheduleRelationship;
