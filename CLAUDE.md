@@ -28,7 +28,7 @@ An MCP server exposing GTFS transit data as tools, over stdio or Streamable HTTP
 - `.dockerignore` excludes most of the repo and the build stage copies only `package*.json`, `tsconfig.json` and `src/`, so a new file the server needs at runtime has to be added to both. `package.json` stays in the runtime stage because `src/server.ts` reads the version from it.
 - The image sets `HOST=0.0.0.0` (the code defaults to `127.0.0.1`), `GTFS_MCP_DATA_DIR=/data` and `GTFS_MCP_CONFIG=/config/config.json`.
 - `docker-publish.yml` builds on every PR and push to `main`, and publishes only on a `v*` tag or a manual dispatch. arm64 builds on a native runner. No QEMU: `npm ci` under emulation hung, which is also why there's no `linux/arm/v7` build.
-- To release: bump `version` in `package.json`, push a matching `vX.Y.Z` tag (publishes `X.Y.Z`, `X.Y` and `latest`), then create the GitHub Release by hand with `gh release create`. The `main` image tag only moves on a manual dispatch.
+- To release: bump `version` in `package.json` and push a matching `vX.Y.Z` tag. That publishes `X.Y.Z`, `X.Y` and `latest`, then creates the GitHub Release with generated notes. A manual dispatch publishes only a `sha-…` tag, for trying an unreleased build.
 - Nothing tests the image. After a Dockerfile change, `docker build -t gtfs-mcp .` and check a stdio session and an HTTP `initialize` against it.
 
 ## Testing
