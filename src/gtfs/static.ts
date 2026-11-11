@@ -133,7 +133,7 @@ async function doImport(
       agencies: [{ url, headers }],
       sqlitePath: tmpPath,
       ignoreDuplicates: true,
-      verbose: false,
+      logLevel: "warning",
       // The gtfs package default is 30s, which is too short for large feeds
       // (VBB Berlin, Paris metro, etc.). Allow up to 5 minutes.
       downloadTimeout: 300_000,

@@ -6,7 +6,9 @@ RUN apk upgrade --no-cache
 WORKDIR /app
 
 COPY package*.json tsconfig.json ./
-RUN npm ci
+# No install scripts: npm would run node-gyp for better-sqlite3, which needs
+# Python, though its prebuilt binary already ships in the package.
+RUN npm ci --ignore-scripts
 
 COPY src/ ./src/
 RUN npm run build && \

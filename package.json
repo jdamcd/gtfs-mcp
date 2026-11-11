@@ -24,9 +24,9 @@
   "dependencies": {
     "@modelcontextprotocol/node": "^2.1.2",
     "@modelcontextprotocol/server": "^2.4.0",
-    "better-sqlite3": "^12.8.0",
-    "gtfs": "^4.14.1",
-    "gtfs-realtime-bindings": "^1.1.1",
+    "better-sqlite3": "^13.0.3",
+    "gtfs": "^4.21.0",
+    "gtfs-realtime-bindings": "^2.2.0",
     "zod": "^4.2.0"
   },
   "devDependencies": {
