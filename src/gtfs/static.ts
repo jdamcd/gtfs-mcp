@@ -141,7 +141,11 @@ async function doImport(
   } catch (err) {
     releaseDb(tmpPath);
     rmSync(tmpPath, { force: true });
-    throw err;
+    // The gtfs package names the URL it fetched in its errors, and with
+    // query_param auth that URL carries the key. Tool errors reach the client.
+    if (url === system.schedule_url) throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(message.replaceAll(url, system.schedule_url));
   }
   releaseDb(tmpPath);
 

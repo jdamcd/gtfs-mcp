@@ -65,6 +65,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   rmSync(TMP_ROOT, { recursive: true, force: true });
 });
 
@@ -81,6 +82,22 @@ describe("ensureGtfsLoaded", () => {
     await expect(ensureGtfsLoaded(system, TMP_ROOT, 24)).rejects.toThrow("network error");
     expect(existsSync(dbPath)).toBe(false);
     expect(scratchFiles(system.id)).toEqual([]);
+  });
+
+  it("keeps a query param key out of import errors", async () => {
+    vi.stubEnv("TEST_GTFS_KEY", "s3cret");
+    const system = {
+      ...makeSystem(),
+      auth: { type: "query_param" as const, param_name: "api_key", key_env: "TEST_GTFS_KEY" },
+    };
+
+    vi.mocked(importGtfs).mockImplementation(async ({ agencies }: any) => {
+      throw new Error(`Unable to download GTFS from ${agencies[0].url}.`);
+    });
+
+    const err = await ensureGtfsLoaded(system, TMP_ROOT, 24).catch((e) => e);
+    expect(err.message).toBe("Unable to download GTFS from http://localhost/gtfs.zip.");
+    expect(err.stack).not.toContain("s3cret");
   });
 
   it("keeps serving the existing DB when a refresh fails", async () => {
