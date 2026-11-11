@@ -20,12 +20,12 @@ export function registerTransitStatusPrompt(ctx: ToolContext): void {
       title: "Transit status",
       description:
         "Summarise currently-active service alerts for configured transit systems.",
-      argsSchema: {
+      argsSchema: z.object({
         system: z
           .string()
           .optional()
           .describe("System ID (leave blank for all systems)"),
-      },
+      }),
     },
     ({ system }) => {
       const allIds = Array.from(ctx.systems.keys());

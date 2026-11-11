@@ -26,9 +26,9 @@ export function registerFeedHealthTools(ctx: ToolContext): void {
       title: "Get realtime feed health",
       description:
         "Diagnostics for a transit system's GTFS-RT feeds: per-feed-type URL counts (ok/failed), entity counts, oldest feed-header age, and fetch error messages. Use this to check whether realtime data is reachable and fresh.",
-      inputSchema: {
+      inputSchema: z.object({
         system: z.string().describe("System ID, from list_systems"),
-      },
+      }),
       outputSchema: portableOutputSchema(FeedHealthResponseSchema),
       annotations: {
         readOnlyHint: true,

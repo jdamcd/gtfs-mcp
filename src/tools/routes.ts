@@ -21,7 +21,7 @@ export function registerRouteTools(ctx: ToolContext): void {
       title: "List routes",
       description:
         "List routes in a transit system. For large feeds (1000+ routes), filter with `query` (substring match on short/long name or route_id) or `route_type`. Returns `total` so the caller can tell when results are truncated.",
-      inputSchema: {
+      inputSchema: z.object({
         system: z.string().describe("System ID, from list_systems"),
         query: z
           .string()
@@ -50,7 +50,7 @@ export function registerRouteTools(ctx: ToolContext): void {
           .min(0)
           .default(0)
           .describe("Pagination offset"),
-      },
+      }),
       outputSchema: portableOutputSchema(ListRoutesResponseSchema),
       annotations: {
         readOnlyHint: true,
@@ -87,7 +87,7 @@ export function registerRouteTools(ctx: ToolContext): void {
       title: "Get route details",
       description:
         "Get a route and an ordered stop list for each direction, with the direction's headsign. Each stop list is drawn from the route's longest trip variant in that direction; routes with branches may have service patterns that skip some stops — use get_trip for a specific trip's actual sequence. Pass route_id from list_routes; if only a human name is known, search with list_routes first.",
-      inputSchema: {
+      inputSchema: z.object({
         system: z.string().describe("System ID, from list_systems"),
         route_id: z.string().describe("Route ID, from list_routes"),
         direction_id: z
@@ -96,7 +96,7 @@ export function registerRouteTools(ctx: ToolContext): void {
           .describe(
             "Agency-defined direction 0 or 1 (semantics vary — call without this to see both, each with its headsign)"
           ),
-      },
+      }),
       outputSchema: portableOutputSchema(RouteDetailsResponseSchema),
       annotations: {
         readOnlyHint: true,

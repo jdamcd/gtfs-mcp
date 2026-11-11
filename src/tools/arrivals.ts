@@ -48,7 +48,7 @@ export function registerArrivalTools(ctx: ToolContext): void {
       title: "Get arrivals at a stop",
       description:
         "Get upcoming arrivals at a stop. Accepts a parent station ID and resolves to all child platforms. Merges realtime data (authoritative within its horizon) with scheduled times (fills beyond). Cancelled trips and skipped stops are excluded; includes services that roll past midnight via yesterday's 24h+ stop_times. Returns data_source indicating which inputs contributed, and `warnings` when a realtime feed could not be fetched.",
-      inputSchema: {
+      inputSchema: z.object({
         system: z.string().describe("System ID, from list_systems"),
         stop_id: z
           .string()
@@ -61,7 +61,7 @@ export function registerArrivalTools(ctx: ToolContext): void {
           .max(100)
           .default(10)
           .describe("Maximum number of arrivals to return"),
-      },
+      }),
       outputSchema: portableOutputSchema(ArrivalsResponseSchema),
       annotations: {
         readOnlyHint: true,

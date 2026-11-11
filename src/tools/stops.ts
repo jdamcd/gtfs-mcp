@@ -22,7 +22,7 @@ export function registerStopTools(ctx: ToolContext): void {
       title: "Search stops by name",
       description:
         "Find stops by name (case-insensitive substring on stop_name). Returns parent stations and standalone stops, not child platforms. Use this when the user names a stop; use find_nearby_stops when they give coordinates or 'near me'.",
-      inputSchema: {
+      inputSchema: z.object({
         system: z.string().describe("System ID, from list_systems"),
         query: z.string().min(1).describe("Case-insensitive substring of stop_name"),
         limit: z
@@ -32,7 +32,7 @@ export function registerStopTools(ctx: ToolContext): void {
           .max(100)
           .default(10)
           .describe("Maximum number of results"),
-      },
+      }),
       outputSchema: portableOutputSchema(SearchStopsResponseSchema),
       annotations: {
         readOnlyHint: true,
@@ -63,7 +63,7 @@ export function registerStopTools(ctx: ToolContext): void {
       title: "Find nearby stops",
       description:
         "Find stops near a latitude/longitude, ordered by distance. Returns parent stations and standalone stops (not child platforms). Requires coordinates — if the user gave a place name, search_stops with that name first to get coordinates.",
-      inputSchema: {
+      inputSchema: z.object({
         system: z.string().describe("System ID, from list_systems"),
         lat: z
           .number()
@@ -88,7 +88,7 @@ export function registerStopTools(ctx: ToolContext): void {
           .max(100)
           .default(10)
           .describe("Maximum number of results"),
-      },
+      }),
       outputSchema: portableOutputSchema(NearbyStopsResponseSchema),
       annotations: {
         readOnlyHint: true,
@@ -120,12 +120,12 @@ export function registerStopTools(ctx: ToolContext): void {
       title: "Get stop details",
       description:
         "Get a stop's details and the routes serving it. Accepts any stop_id (parent station, standalone, or child platform). Use search_stops or find_nearby_stops first if only a name is known.",
-      inputSchema: {
+      inputSchema: z.object({
         system: z.string().describe("System ID, from list_systems"),
         stop_id: z
           .string()
           .describe("Stop ID from search_stops / find_nearby_stops / get_route"),
-      },
+      }),
       outputSchema: portableOutputSchema(StopDetailsResponseSchema),
       annotations: {
         readOnlyHint: true,
