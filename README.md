@@ -169,11 +169,11 @@ LLM evals use [promptfoo](https://promptfoo.dev/) to verify that a model selects
 npm run build
 npm run eval:smoke    # one pass on Haiku only
 npm run eval          # all 3 models, 3 repeats each
-npm run eval:summary  # re-print the summary for the last full run
+npm run eval:summary  # rebuild the report for the last full run
 npm run eval:view     # web UI to inspect individual responses
 ```
 
-The summary gives each model's pass rate with a 95% confidence interval, cases that pass inconsistently across repeats, tokens and estimated cost.
+Each run writes an HTML report beside its results in `evals/results/` and prints a link (includes confidence interval, problem cases, how many cases exercise each tool, tokens, and estimated cost).
 
 ### MCP inspector
 

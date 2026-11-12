@@ -19,7 +19,7 @@
     "eval": "node evals/run.js evals/results/latest.json --no-cache --repeat 3",
     "eval:view": "npx --yes promptfoo@0.125.1 view",
     "eval:smoke": "node evals/run.js evals/results/smoke.json --no-cache --filter-providers haiku",
-    "eval:summary": "node evals/summarize.js evals/results/latest.json"
+    "eval:summary": "node evals/report.js evals/results/latest.json"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "^2.1.2",

@@ -43,13 +43,13 @@ promptfoo checks that models pick the right tools for transit questions (`prompt
 
 ```bash
 npm run build && npm run eval:smoke   # evals run against dist/; one pass on Haiku
-npm run eval                          # Haiku/Sonnet/Opus 5.5 × 3 repeats, then a summary
-npm run eval:summary                  # re-print the summary of evals/results/latest.json
+npm run eval                          # Haiku/Sonnet/Opus 5.5 × 3 repeats, then an HTML report
+npm run eval:summary                  # rebuild the report from evals/results/latest.json
 ```
 
 - promptfoo runs the full tool loop against the real server with `config.mta.json`, so tools hit live MTA data: assert on the calls, not on what they return.
 - `evals/tool-calls.js` grades the calls in `response.metadata.toolCalls` against each case's `metadata.expect`. Don't grade the output text: it can name a tool the model never called. A required call only counts if it uses the system in `defaultTest.metadata.system`.
-- `evals/run.js` prints the summary even when cases fail, and exits with promptfoo's status (100 when any case fails).
+- `evals/run.js` writes the HTML report (`evals/report.js`) beside the results JSON even when cases fail, and exits with promptfoo's status (100 when any case fails).
 - promptfoo isn't a devDependency: `run.js` and the `eval:view` script pin its `npx` version, so bump both together.
-- `evals/summarize.js` has its own price table, since promptfoo has none for the 5.5 models. It and `tool-calls.js` are unit-tested in `test/eval-assertions.test.ts`.
+- `evals/summarize.js` has its own price table, since promptfoo has none for the 5.5 models. It, `report.js` and `tool-calls.js` are unit-tested in `test/eval-assertions.test.ts`.
 - The eval system prompt doesn't name the system, and promptfoo doesn't pass the server's `instructions` to the model, so evals only test what the tool descriptions get across.

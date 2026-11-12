@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error -- plain JS module used by promptfoo
-import { assertToolCalls, executedToolCalls, gradeToolCalls } from "../evals/tool-calls.js";
+import {
+  assertToolCalls,
+  describeExpectations,
+  executedToolCalls,
+  gradeToolCalls,
+  neededTools,
+} from "../evals/tool-calls.js";
 // @ts-expect-error -- plain JS module used by promptfoo
 import { summarize, wilson } from "../evals/summarize.js";
+// @ts-expect-error -- plain JS module used by promptfoo
+import { renderHtml, renderText } from "../evals/report.js";
 
 const call = (name: string, input: object = {}, isError = false) => ({ name, input, isError });
 
@@ -145,6 +153,86 @@ describe("assertToolCalls", () => {
   });
 });
 
+describe("neededTools", () => {
+  it("needs a tool named by a requirement, or by every alternative of one", () => {
+    const needed = neededTools({
+      require: [
+        { tool: "get_alerts" },
+        { anyOf: [{ tool: "get_route", input: { direction_id: 0 } }, { tool: "get_route" }] },
+        { anyOf: [{ tool: "search_stops" }, { tool: "find_nearby_stops" }] },
+      ],
+    });
+    expect([...needed].sort()).toEqual(["get_alerts", "get_route"]);
+  });
+
+  it("follows order rules back from a needed tool, however they are listed", () => {
+    const needed = neededTools({
+      require: [{ tool: "get_trip" }],
+      order: [
+        ["list_systems", "search_stops"],
+        ["get_arrivals", "get_trip"],
+        ["search_stops", "get_arrivals"],
+        ["list_routes", "get_route"],
+      ],
+    });
+    expect([...needed].sort()).toEqual(["get_arrivals", "get_trip", "list_systems", "search_stops"]);
+  });
+
+  it("needs nothing when the case has no requirements", () => {
+    expect(neededTools({ noTools: true }).size).toBe(0);
+    expect(neededTools(undefined).size).toBe(0);
+  });
+});
+
+describe("describeExpectations", () => {
+  it("phrases each rule of a case's spec", () => {
+    expect(
+      describeExpectations({
+        only: ["list_systems", "get_route"],
+        require: [
+          { tool: "get_alerts" },
+          { anyOf: [{ tool: "get_route", input: { route_id: "1", direction_id: 0 } }, { tool: "get_route", input: { direction_id: null } }] },
+        ],
+        order: [["list_routes", "get_route"]],
+      }),
+    ).toEqual([
+      "calls nothing but list_systems, get_route",
+      "calls get_alerts",
+      'calls get_route with route_id "1", direction_id 0, or get_route with no direction_id',
+      "doesn't call get_route before list_routes",
+    ]);
+    expect(describeExpectations({ noTools: true })).toEqual(["calls no tools"]);
+    expect(describeExpectations({ system: "test", require: [{ tool: "get_stop" }] })).toEqual([
+      "calls get_stop",
+      'uses system "test" for those calls',
+    ]);
+    // The system only qualifies required calls, so alone it checks nothing.
+    expect(describeExpectations({ system: "test", only: ["list_systems"] })).toEqual([
+      "calls nothing but list_systems",
+    ]);
+    expect(describeExpectations(null)).toEqual([]);
+  });
+});
+
+const evalRow = ({
+  label = "haiku",
+  desc = "A",
+  success = true,
+  reason = "",
+  tools = [] as string[],
+  expect = undefined as object | undefined,
+} = {}) => ({
+  provider: { id: `anthropic:messages:claude-${label}-5-5`, label },
+  testCase: { description: desc, metadata: { expect } },
+  success,
+  failureReason: success ? 0 : 1,
+  gradingResult: success ? { pass: true } : { pass: false, reason },
+  response: {
+    tokenUsage: { prompt: 1000, completion: 100 },
+    metadata: { toolCalls: tools.map((name) => ({ name, input: {} })) },
+  },
+});
+
 describe("summarize", () => {
   it("computes a Wilson interval", () => {
     const [lo, hi] = wilson(9, 10);
@@ -162,7 +250,7 @@ describe("summarize", () => {
       response: { tokenUsage: { prompt: 1000, completion: 100 } },
       latencyMs: 1000,
     });
-    const report = summarize({
+    const summary = summarize({
       results: {
         results: [
           row("haiku", "A", true),
@@ -173,11 +261,17 @@ describe("summarize", () => {
         ],
       },
     });
-    expect(report).toContain("| haiku | 50.0% |");
+    const model = (label: string) => summary.models.find((m: { label: string }) => m.label === label);
+    expect(model("haiku")).toMatchObject({ rate: 0.5, graded: 2, errors: 1 });
     // No graded runs means no data, not a certain 0%.
-    expect(report).toContain("| sonnet | - | - | 0 | 1 |");
-    expect(report).toContain("1/2 ⚠️ (+1 err)");
-    expect(report).toContain("missing get_stop");
+    expect(model("sonnet")).toMatchObject({ rate: null, interval: null, graded: 0, errors: 1 });
+    expect(summary.cases[0].results.haiku).toMatchObject({
+      passes: 1,
+      graded: 2,
+      errors: 1,
+      status: "inconsistent",
+      reasons: ["missing get_stop"],
+    });
   });
 
   it("reports mean tool calls over graded runs", () => {
@@ -193,16 +287,16 @@ describe("summarize", () => {
         ...(calls ? { metadata: { toolCalls: Array.from({ length: calls }, () => ({ name: "get_stop", input: {} })) } } : {}),
       },
     });
-    const report = summarize({
+    const summary = summarize({
       results: { results: [row(3), row(0), row(9, "429")] },
     });
     // Exclude errored runs
-    expect(report).toMatch(/\| haiku \| 100\.0% \| [^|]+ \| 2 \| 1 \| 1\.5 \|/);
-    expect(report).toContain("| A | 2/2 (+1 err) · 1.5 |");
+    expect(summary.models[0]).toMatchObject({ rate: 1, graded: 2, errors: 1, callsPerRun: 1.5 });
+    expect(summary.cases[0].results.haiku).toMatchObject({ passes: 2, graded: 2, errors: 1, callsPerRun: 1.5 });
   });
 
   it("grades hitting max_tool_calls as a failure, not an error", () => {
-    const report = summarize({
+    const summary = summarize({
       results: {
         results: [
           {
@@ -217,8 +311,109 @@ describe("summarize", () => {
         ],
       },
     });
-    expect(report).toContain("| haiku | 0.0% |");
-    expect(report).toContain("0/1 ❌");
-    expect(report).toContain("hit max_tool_calls");
+    expect(summary.models[0]).toMatchObject({ rate: 0, graded: 1, errors: 0 });
+    expect(summary.cases[0].results.haiku).toMatchObject({
+      status: "failed",
+      reasons: ["hit max_tool_calls"],
+    });
+  });
+
+  it("counts the cases that need each tool and the cases where it was called", () => {
+    const viaRoutes = { require: [{ tool: "get_route" }], order: [["list_routes", "get_route"]] };
+    const summary = summarize(
+      {
+        results: {
+          results: [
+            evalRow({ desc: "A", tools: ["list_systems", "list_routes", "get_route"], expect: viaRoutes }),
+            evalRow({ desc: "A", tools: ["list_systems", "get_route"], expect: viaRoutes }),
+            evalRow({ desc: "B", tools: ["list_systems", "get_stop"], expect: { require: [{ tool: "get_stop" }] } }),
+          ],
+        },
+      },
+      ["get_trip"],
+    );
+    expect(summary.tools).toEqual([
+      { name: "get_route", neededBy: 1, calledIn: { haiku: 1 } },
+      { name: "get_stop", neededBy: 1, calledIn: { haiku: 1 } },
+      { name: "list_routes", neededBy: 1, calledIn: { haiku: 1 } },
+      { name: "get_trip", neededBy: 0, calledIn: { haiku: 0 } },
+      { name: "list_systems", neededBy: 0, calledIn: { haiku: 2 } },
+    ]);
+  });
+});
+
+describe("report", () => {
+  const failed = (desc: string, reason: string) => evalRow({ desc, success: false, reason });
+  const summary = summarize({
+    config: { description: "Tools <eval>" },
+    results: {
+      results: [
+        failed("Stops & routes", 'Called: search_stops {"query":"<b>"}'),
+        failed("Stops & routes", 'Called: search_stops {"query":"<b>"}'),
+        evalRow({ desc: "Alerts" }),
+        failed("Alerts", "missing get_alerts"),
+        evalRow({ label: "opus", desc: "Stops & routes" }),
+        evalRow({ label: "opus", desc: "Alerts" }),
+      ],
+    },
+  });
+
+  it("keeps the terminal output to a line per model and per failing case", () => {
+    expect(renderText(summary).split("\n")).toEqual([
+      "haiku  1/4 passed (25.0%)",
+      "opus   2/2 passed (100.0%)",
+      "Failed every run: Stops & routes (haiku)",
+      "Inconsistent: Alerts (haiku, 1/2)",
+      "Estimated cost: $0.01",
+    ]);
+  });
+
+  it("escapes text taken from the results file", () => {
+    const html = renderHtml(summary);
+    expect(html).toContain("<title>Tools &lt;eval&gt;</title>");
+    expect(html).toContain('<th scope="row">Stops &amp; routes</th>');
+    expect(html).toContain("<dd>Called: search_stops {&quot;query&quot;:&quot;&lt;b&gt;&quot;}</dd>");
+    expect(html).not.toContain("<b>");
+  });
+
+  it("shows a whole mean of tool calls without a decimal", () => {
+    const calls = (desc: string, n: number) => evalRow({ desc, tools: Array(n).fill("get_stop") });
+    const html = renderHtml(
+      summarize({
+        results: {
+          results: [calls("A", 1), calls("A", 1), calls("B", 4), calls("B", 4), calls("C", 1), calls("C", 2)],
+        },
+      }),
+    );
+    expect(html).toContain(">1 call<");
+    expect(html).toContain(">4 calls<");
+    expect(html).toContain(">1.5 calls<");
+  });
+
+  it("lets a case open to show its query and what it checks", () => {
+    const html = renderHtml(
+      summarize({
+        results: {
+          results: [
+            { ...evalRow({ desc: "A & B", expect: { require: [{ tool: "get_stop" }] } }), vars: { query: "Where is <here>?" } },
+          ],
+        },
+      }),
+    );
+    expect(html).toContain(
+      '<details><summary>A &amp; B</summary><div class="about"><div class="aside">Query</div><p>Where is &lt;here&gt;?</p><div class="aside">Passes when the model</div><ul><li>calls get_stop</li></ul></div></details>',
+    );
+  });
+
+  it("flags a tool that no case needs", () => {
+    const html = renderHtml(summarize({ results: { results: [evalRow()] } }, ["get_trip"]));
+    expect(html).toMatch(/<code>get_trip<\/code><\/th>\s*<td class="num"><span class="badge warning" role="img" aria-label="No case needs it"/);
+  });
+
+  it("marks failed and inconsistent cells and leaves passed ones plain", () => {
+    const html = renderHtml(summary);
+    expect(html).toMatch(/<td class="critical">.*aria-label="Failed every run".*?0\/2/);
+    expect(html).toMatch(/<td class="warning">.*aria-label="Passed some runs".*?1\/2/);
+    expect(html).toMatch(/<td><div class="cell"><span class="mark"><\/span>/);
   });
 });

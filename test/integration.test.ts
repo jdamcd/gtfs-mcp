@@ -16,6 +16,8 @@ import {
   TripDetailsResponseSchema,
   FeedHealthResponseSchema,
 } from "../src/types.js";
+// @ts-expect-error -- plain JS module used by promptfoo
+import { registeredTools } from "../evals/report.js";
 
 const AGENCY_TZ = "America/New_York";
 
@@ -151,6 +153,11 @@ function toLocalTimeString(unixSecs: number): string {
 describe("server info", () => {
   it("reports the package version", () => {
     expect(client.getServerVersion()?.version).toBe(packageJson.version);
+  });
+
+  it("registers every tool in a form the eval report's source scan finds", async () => {
+    const { tools } = await client.listTools();
+    expect(registeredTools().sort()).toEqual(tools.map((tool) => tool.name).sort());
   });
 });
 

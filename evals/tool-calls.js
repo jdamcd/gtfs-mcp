@@ -33,9 +33,58 @@ function callMatches(call, spec, system) {
   );
 }
 
-function describeSpec(spec) {
-  const input = spec.input ? ` ${JSON.stringify(spec.input)}` : "";
-  return `${spec.tool}${input}`;
+const optionsOf = (requirement) => requirement.anyOf ?? [requirement];
+
+// The tools a case can't pass without calling. An anyOf only needs a tool
+// when every alternative is that tool, and an order rule makes its first tool
+// needed once its second is.
+export function neededTools(spec) {
+  const needed = new Set();
+  for (const req of spec?.require ?? []) {
+    const [tool, ...others] = new Set(optionsOf(req).map((option) => option.tool));
+    if (!others.length) needed.add(tool);
+  }
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const [first, then] of spec?.order ?? []) {
+      if (needed.has(then) && !needed.has(first)) {
+        needed.add(first);
+        grew = true;
+      }
+    }
+  }
+  return needed;
+}
+
+function describeOption({ tool, input }) {
+  const args = Object.entries(input ?? {}).map(([key, value]) =>
+    value === null ? `no ${key}` : `${key} ${JSON.stringify(value)}`,
+  );
+  return args.length ? `${tool} with ${args.join(", ")}` : tool;
+}
+
+// What a case checks, as phrases that each complete "The model ...".
+export function describeExpectations(spec) {
+  const lines = [];
+  if (spec?.noTools) lines.push("calls no tools");
+  if (spec?.only) lines.push(`calls nothing but ${spec.only.join(", ")}`);
+  for (const req of spec?.require ?? []) {
+    lines.push(`calls ${optionsOf(req).map(describeOption).join(", or ")}`);
+  }
+  if (spec?.system && spec.require?.length) {
+    lines.push(`uses system ${JSON.stringify(spec.system)} for those calls`);
+  }
+  for (const [first, then] of spec?.order ?? []) {
+    lines.push(`doesn't call ${then} before ${first}`);
+  }
+  return lines;
+}
+
+// The spec a case is graded against: its expectations plus the system that
+// defaultTest sets once for every case.
+export function caseSpec(metadata) {
+  return metadata?.expect ? { system: metadata.system, ...metadata.expect } : null;
 }
 
 function describeCall(call) {
@@ -51,8 +100,8 @@ function describeCall(call) {
  *   `null` means the argument must be left out.
  *   A call the tool rejected still counts: the model chose correctly.
  * spec.system: if set, a call made with a different `system` doesn't satisfy
- *   a requirement, so a guessed system ID can't pass. assertToolCalls fills
- *   it from metadata.system, which defaultTest sets once for every case.
+ *   a requirement, so a guessed system ID can't pass. caseSpec fills it
+ *   from metadata.system, which defaultTest sets once for every case.
  * spec.order: list of [first, then] tool-name pairs. `then` must not be called
  *   before `first` has been, e.g. to check an ID was looked up, not guessed.
  *   Holds trivially if `then` is never called; use require to make it required.
@@ -73,9 +122,9 @@ export function gradeToolCalls(calls, spec) {
     if (unexpected.length) failures.push(`only ${spec.only.join(", ")} expected, also called ${unexpected.join(", ")}`);
   }
   for (const req of spec.require ?? []) {
-    const options = req.anyOf ?? [req];
+    const options = optionsOf(req);
     if (!calls.some((call) => options.some((opt) => callMatches(call, opt, spec.system)))) {
-      failures.push(`missing ${options.map(describeSpec).join(" or ")}`);
+      failures.push(`missing ${options.map(describeOption).join(", or ")}`);
     }
   }
   for (const [first, then] of spec.order ?? []) {
@@ -102,8 +151,7 @@ export function gradeToolCalls(calls, spec) {
  * expects.
  */
 export function assertToolCalls(output, context) {
-  const metadata = context?.test?.metadata;
-  const spec = metadata?.expect;
+  const spec = caseSpec(context?.test?.metadata);
   if (!spec) {
     // Fail loudly: a case without a spec would otherwise pass vacuously.
     return { pass: false, score: 0, reason: "Test case has no metadata.expect" };
@@ -112,10 +160,7 @@ export function assertToolCalls(output, context) {
   if (finishReason === "content_filter") {
     return { pass: false, score: 0, reason: "Model refused the request" };
   }
-  const result = gradeToolCalls(executedToolCalls(context?.providerResponse), {
-    system: metadata.system,
-    ...spec,
-  });
+  const result = gradeToolCalls(executedToolCalls(context?.providerResponse), spec);
   // Running out of tokens while writing the final answer doesn't matter if
   // the calls were right. When they weren't, name it so it isn't mistaken for
   // a wrong tool choice.

@@ -1,14 +1,9 @@
-#!/usr/bin/env node
 // promptfoo's own report shows individual results, not whether one model is
 // actually better than another. With ~15 cases a few points of pass rate is
-// noise, so this reports confidence intervals and per-case consistency across
-// repeats to show which differences are real.
-//
-// Usage: node evals/summarize.js evals/results/latest.json
+// noise, so this works out confidence intervals and per-case consistency
+// across repeats to show which differences are real. report.js renders it.
 
-import { readFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
-import { executedToolCalls } from "./tool-calls.js";
+import { caseSpec, executedToolCalls, neededTools } from "./tool-calls.js";
 
 // USD per million tokens, first-party API list prices as of 2026-10.
 // promptfoo has no prices for these models, so cost is computed here.
@@ -35,17 +30,24 @@ function modelId(providerId) {
   return providerId?.replace(/^anthropic:messages:/, "") ?? "unknown";
 }
 
-const pct = (x) => `${(x * 100).toFixed(1)}%`;
+function caseStatus(c) {
+  if (c.n === 0) return "ungraded";
+  if (c.passes === c.n) return "passed";
+  return c.passes === 0 ? "failed" : "inconsistent";
+}
 
-export function summarize(data) {
+// knownTools are listed even if no case names them and no model calls them.
+export function summarize(data, knownTools = []) {
   const rows = data.results?.results ?? data.results ?? [];
   const models = new Map();
   const cases = new Map();
+  let lastRepeat = 0;
 
   for (const r of rows) {
     const label = r.provider?.label ?? r.provider?.id;
     const id = modelId(r.provider?.id);
     const desc = r.testCase?.description ?? r.description ?? `test ${r.testIdx}`;
+    lastRepeat = Math.max(lastRepeat, r.repeatIndex ?? 0);
     // promptfoo reports hitting max_tool_calls as a provider error, but it means
     // the model kept calling tools, so it's graded as a failure.
     const hitToolLimit = /exceeded max_tool_calls/.test(r.error ?? r.response?.error ?? "");
@@ -62,10 +64,25 @@ export function summarize(data) {
     m.output += usage.completion ?? 0;
     if (Number.isFinite(r.latencyMs)) m.latencies.push(r.latencyMs);
 
-    if (!cases.has(desc)) cases.set(desc, new Map());
-    const perModel = cases.get(desc);
+    if (!cases.has(desc)) {
+      const spec = caseSpec(r.testCase?.metadata);
+      cases.set(desc, {
+        query: r.vars?.query ?? null,
+        spec,
+        needed: neededTools(spec),
+        perModel: new Map(),
+      });
+    }
+    const { perModel } = cases.get(desc);
     if (!perModel.has(label)) {
-      perModel.set(label, { passes: 0, n: 0, errors: 0, calls: 0, reasons: new Set() });
+      perModel.set(label, {
+        passes: 0,
+        n: 0,
+        errors: 0,
+        calls: 0,
+        reasons: new Set(),
+        tools: new Set(),
+      });
     }
     const c = perModel.get(label);
 
@@ -78,9 +95,11 @@ export function summarize(data) {
     }
     m.graded++;
     c.n++;
-    const calls = executedToolCalls(r.response).length;
+    const executed = executedToolCalls(r.response);
+    const calls = executed.length;
     m.calls += calls;
     c.calls += calls;
+    for (const call of executed) c.tools.add(call.name);
     if (r.success) {
       m.passes++;
       c.passes++;
@@ -91,65 +110,71 @@ export function summarize(data) {
     }
   }
 
-  const labels = [...models.keys()];
-  const lines = [];
-  let totalCost = 0;
-
-  lines.push("## Models", "");
-  lines.push("| Model | Pass rate | 95% CI | Graded | Errors | Calls/run | Input tok | Output tok | Est. cost | p50 latency |");
-  lines.push("|---|---|---|---|---|---|---|---|---|---|");
-  for (const [label, m] of models) {
-    const [lo, hi] = wilson(m.passes, m.graded);
+  const modelStats = [...models].map(([label, m]) => {
     const price = PRICES[m.id];
-    const cost = price ? (m.input * price.input + m.output * price.output) / 1e6 : NaN;
-    if (Number.isFinite(cost)) totalCost += cost;
     const sorted = [...m.latencies].sort((a, b) => a - b);
-    const p50 = sorted.length ? `${(sorted[Math.floor(sorted.length / 2)] / 1000).toFixed(1)}s` : "-";
-    lines.push(
-      `| ${label} | ${m.graded ? pct(m.passes / m.graded) : "-"} | ${m.graded ? `${pct(lo)}–${pct(hi)}` : "-"} | ${m.graded} | ${m.errors} | ${m.graded ? (m.calls / m.graded).toFixed(1) : "-"} | ${m.input} | ${m.output} | ${Number.isFinite(cost) ? `$${cost.toFixed(3)}` : "unknown"} | ${p50} |`,
-    );
-  }
-  lines.push("", `Total estimated cost: $${totalCost.toFixed(3)}`, "");
+    return {
+      label,
+      graded: m.graded,
+      passes: m.passes,
+      errors: m.errors,
+      // No graded runs means no data, not a certain 0%.
+      rate: m.graded ? m.passes / m.graded : null,
+      interval: m.graded ? wilson(m.passes, m.graded) : null,
+      callsPerRun: m.graded ? m.calls / m.graded : null,
+      input: m.input,
+      output: m.output,
+      cost: price ? (m.input * price.input + m.output * price.output) / 1e6 : null,
+      p50Ms: sorted.length ? sorted[Math.floor(sorted.length / 2)] : null,
+    };
+  });
 
-  lines.push("## Cases (passes / graded runs · tool calls per run)", "");
-  lines.push(`| Case | ${labels.join(" | ")} |`);
-  lines.push(`|---|${labels.map(() => "---").join("|")}|`);
-  const failures = [];
-  for (const [desc, perModel] of cases) {
-    const cells = labels.map((label) => {
-      const c = perModel.get(label);
-      if (!c) return "-";
-      const flag = c.n > 0 && c.passes > 0 && c.passes < c.n ? " ⚠️" : c.n > 0 && c.passes === 0 ? " ❌" : "";
-      const err = c.errors ? ` (+${c.errors} err)` : "";
-      if (c.reasons.size) failures.push({ desc, label, reasons: [...c.reasons] });
-      const calls = c.n ? ` · ${(c.calls / c.n).toFixed(1)}` : "";
-      return `${c.passes}/${c.n}${flag}${err}${calls}`;
-    });
-    lines.push(`| ${desc} | ${cells.join(" | ")} |`);
-  }
-  const modelStats = [...models.values()];
-  if (modelStats.some((m) => m.passes < m.graded)) {
-    lines.push("", "⚠️ = inconsistent across repeats, ❌ = failed every run", "");
-  } else if (modelStats.length > 0 && modelStats.every((m) => m.errors === 0)) {
-    lines.push("", "✅ All runs passed", "");
-  }
+  const caseStats = [...cases].map(([desc, { query, spec, perModel }]) => ({
+    desc,
+    query,
+    spec,
+    results: Object.fromEntries(
+      [...perModel].map(([label, c]) => [
+        label,
+        {
+          passes: c.passes,
+          graded: c.n,
+          errors: c.errors,
+          callsPerRun: c.n ? c.calls / c.n : null,
+          status: caseStatus(c),
+          reasons: [...c.reasons],
+        },
+      ]),
+    ),
+  }));
 
-  if (failures.length) {
-    lines.push("## Failure reasons", "");
-    for (const f of failures) {
-      lines.push(`- **${f.desc}** (${f.label})`);
-      for (const reason of f.reasons) lines.push(`  - ${reason}`);
-    }
-    lines.push("");
-  }
-  return lines.join("\n");
-}
+  const labels = [...models.keys()];
+  const everyCase = [...cases.values()];
+  const toolNames = new Set([
+    ...knownTools,
+    ...everyCase.flatMap((c) => [...c.needed, ...[...c.perModel.values()].flatMap((m) => [...m.tools])]),
+  ]);
+  const casesWhere = (test) => everyCase.filter(test).length;
+  const toolStats = [...toolNames]
+    .map((name) => ({
+      name,
+      neededBy: casesWhere((c) => c.needed.has(name)),
+      calledIn: Object.fromEntries(
+        labels.map((label) => [label, casesWhere((c) => c.perModel.get(label)?.tools.has(name))]),
+      ),
+    }))
+    .sort((a, b) => b.neededBy - a.neededBy || a.name.localeCompare(b.name));
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const path = process.argv[2];
-  if (!path) {
-    console.error("Usage: node evals/summarize.js <promptfoo-results.json>");
-    process.exit(1);
-  }
-  console.log(summarize(JSON.parse(readFileSync(path, "utf8"))));
+  return {
+    run: {
+      title: data.config?.description ?? "Eval report",
+      timestamp: data.results?.timestamp ?? null,
+      promptfooVersion: data.metadata?.promptfooVersion ?? null,
+      repeats: lastRepeat + 1,
+    },
+    models: modelStats,
+    cases: caseStats,
+    tools: toolStats,
+    totalCost: modelStats.reduce((sum, m) => sum + (m.cost ?? 0), 0),
+  };
 }
